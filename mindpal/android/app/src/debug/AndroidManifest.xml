@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        DEBUG-ONLY manifest. Android merges this into debug builds and ignores
+        it for release, which is exactly what we want here.
+
+        Since Android 9, apps may not use plain HTTP at all — only HTTPS. Our
+        AI gateway runs on http://localhost during development, so without this
+        flag every request fails with a cleartext-not-permitted error that
+        looks like a network bug.
+
+        Keeping it in the debug manifest means a release build still refuses
+        plain HTTP. A real deployment must serve the gateway over HTTPS; this
+        is a development convenience, not a permanent setting.
+    -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>

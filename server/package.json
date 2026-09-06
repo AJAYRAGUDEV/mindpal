@@ -1,0 +1,20 @@
+{
+  "name": "mindpal-ai-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MindPal AI gateway. Holds the Gemini API key so the Flutter app never has to.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "dev": "node --env-file-if-exists=.env --watch src/index.js",
+    "test": "node --test",
+    "check": "node --env-file-if-exists=.env check-key.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}

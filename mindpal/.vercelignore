@@ -1,0 +1,13 @@
+# Only build/web is served. Everything else would bloat the upload and put
+# source on a public host for no reason.
+android/
+ios/
+linux/
+macos/
+windows/
+lib/
+test/
+.dart_tool/
+build/app/
+build/flutter_assets/
+*.iml

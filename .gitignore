@@ -1,0 +1,4 @@
+# Never commit real secrets. Only .env.example belongs in version control.
+.env
+**/.env
+server/node_modules/
