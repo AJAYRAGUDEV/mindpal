@@ -5,10 +5,12 @@ import 'package:mindpal/services/ai_service.dart';
 import 'package:mindpal/services/game_history_service.dart';
 import 'package:mindpal/services/language_service.dart';
 import 'package:mindpal/services/memory_aid_service.dart';
+import 'package:mindpal/services/memory_vault_service.dart';
 import 'package:mindpal/services/notification_service.dart';
 import 'package:mindpal/services/profile_service.dart';
 import 'package:mindpal/services/reminder_service.dart';
 import 'package:mindpal/storage/local_storage.dart';
+import 'package:mindpal/storage/media/media_store.dart';
 
 /// Smoke tests for the whole app.
 ///
@@ -32,6 +34,7 @@ Future<void> _pumpApp(WidgetTester tester, InMemoryStorage storage) async {
       profileService: ProfileService(storage),
       reminderService: ReminderService(storage, NoopNotificationService()),
       memoryAidService: MemoryAidService(storage),
+      memoryVaultService: MemoryVaultService(storage, media: InMemoryMediaStore()),
       gameHistoryService: GameHistoryService(storage),
       languageService: LanguageService(storage),
       aiService: const DeterministicAiService(),

@@ -8,6 +8,7 @@ import 'services/ai_service.dart';
 import 'services/game_history_service.dart';
 import 'services/language_service.dart';
 import 'services/memory_aid_service.dart';
+import 'services/memory_vault_service.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'theme/app_theme.dart';
@@ -24,6 +25,7 @@ class MindPalApp extends StatefulWidget {
     required this.profileService,
     required this.reminderService,
     required this.memoryAidService,
+    required this.memoryVaultService,
     required this.gameHistoryService,
     required this.aiService,
     required this.languageService,
@@ -34,6 +36,7 @@ class MindPalApp extends StatefulWidget {
   final ProfileService profileService;
   final ReminderService reminderService;
   final MemoryAidService memoryAidService;
+  final MemoryVaultService memoryVaultService;
   final GameHistoryService gameHistoryService;
   final AiService aiService;
   final LanguageService languageService;
@@ -87,6 +90,7 @@ class _MindPalAppState extends State<MindPalApp> {
           profileService: widget.profileService,
           reminderService: widget.reminderService,
           memoryAidService: widget.memoryAidService,
+          memoryVaultService: widget.memoryVaultService,
           gameHistoryService: widget.gameHistoryService,
           aiService: widget.aiService,
           storageHealthy: widget.storageHealthy,

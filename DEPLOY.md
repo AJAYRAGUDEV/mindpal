@@ -29,7 +29,8 @@ project. Render supports Node natively, so nothing needs rewriting.
 | Key | Value |
 |---|---|
 | `GEMINI_API_KEY` | your real key — **only here** |
-| `GEMINI_MODEL` | `gemini-2.5-flash` (verify it is in your model list) |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` (see "Which model" below) |
+| `GEMINI_FALLBACK_MODELS` | `gemini-3.1-flash-lite,gemini-3-flash-preview` |
 | `ALLOWED_ORIGIN` | your Vercel URL, e.g. `https://mindpal.vercel.app` |
 
 `ALLOWED_ORIGIN` accepts a comma-separated list, and `*` for a quick demo.
@@ -79,6 +80,42 @@ backend.
 
 ---
 
+## Which model, and why there is a fallback list
+
+Measured on 22 September 2026 with this gateway's exact request, three
+requests each:
+
+| Model | Result |
+|---|---|
+| `gemini-2.5-flash` | 404 every time: "no longer available to new users" |
+| `gemini-3.6-flash` | 1 answer, 2 x 503 "high demand" |
+| `gemini-3.5-flash-lite` | 3 answers, ~1.3 s each |
+| `gemini-3.1-flash-lite` | 3 answers, ~1.2 s each |
+| `gemini-3-flash-preview` | 3 answers, ~2.4 s each |
+
+Google sheds free-tier load on its newest models and retires old names while
+still listing them, so a single fixed model is a coin toss. The gateway now
+tries `GEMINI_MODEL`, then each of `GEMINI_FALLBACK_MODELS` in order, and
+returns the first usable answer. Each attempt has its own 12 s deadline
+(`REQUEST_TIMEOUT_MS`).
+
+To re-measure, from `server/`:
+
+```bash
+npm run check
+```
+
+The Render log shows which model answered each request:
+
+```
+[ai] #4 task=general_knowledge lang=en input=22ch ctx=0 history=0 origin=https://mindpal.vercel.app
+[ai] #4 model=gemini-3.5-flash-lite ok 1463ms
+```
+
+The question text is never logged, only its length. The key is never logged.
+
+---
+
 ## Verifying Gemini works in production
 
 1. Open the Vercel link.
@@ -96,7 +133,14 @@ Read the small grey line under the answer:
 Then ask **"Tell me about Shillong"** — that has no vault entry, so it is a
 pure general-knowledge call and only works when the backend is reachable.
 
-If it falls back, check the Render logs. The gateway prints the reason.
+If the gateway cannot be reached or every model fails, the app now says so:
+"The AI Assistant is temporarily unavailable. Please try again." with a
+**Try again** button. It no longer pretends to be offline. The Render log
+shows the attempt list for the failed request:
+
+```
+[ai] #7 FAILED code=upstream_error attempts=[gemini-3.5-flash-lite:503/2461ms, ...] 9100ms
+```
 
 ---
 
@@ -115,6 +159,13 @@ phone and open it; allow "install from unknown sources" when asked.
 
 The APK contains the backend URL and nothing else. The Gemini key is not in
 it — the app talks only to the gateway, exactly as the web build does.
+
+**Memory Vault media.** Photos and videos are copied into the app's private
+documents directory (`memory_vault/` under `getApplicationDocumentsPath`).
+They survive restarts and app updates and are removed with the app. Picking
+uses the system photo picker, so no storage permission is declared or
+needed. In the browser the same files go into IndexedDB (per browser, per
+site; not shared between devices).
 
 **Permissions.** The manifest declares `INTERNET` only. Local storage
 (`shared_preferences`) needs no permission. Camera, microphone, and

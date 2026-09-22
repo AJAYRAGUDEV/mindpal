@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../models/vault_memory.dart';
 import '../../services/memory_aid_service.dart';
+import '../../services/memory_vault_service.dart';
 import '../../theme/app_sizes.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/overview_card.dart';
@@ -8,6 +10,7 @@ import '../../widgets/section_title.dart';
 import 'notes_screen.dart';
 import 'people_screen.dart';
 import 'places_screen.dart';
+import '../vault/memory_vault_screen.dart';
 
 /// The Memory Aid hub — the Memory tab's front page.
 ///
@@ -15,9 +18,14 @@ import 'places_screen.dart';
 /// screen keeps its own working copy while open; when it closes we reload
 /// here, so counts and search never go stale.
 class MemoryHubScreen extends StatefulWidget {
-  const MemoryHubScreen({super.key, required this.service});
+  const MemoryHubScreen({
+    super.key,
+    required this.service,
+    required this.vault,
+  });
 
   final MemoryAidService service;
+  final MemoryVaultService vault;
 
   @override
   State<MemoryHubScreen> createState() => _MemoryHubScreenState();
@@ -27,6 +35,7 @@ class _MemoryHubScreenState extends State<MemoryHubScreen> {
   final _searchController = TextEditingController();
 
   MemoryAidData _data = const MemoryAidData();
+  List<VaultMemory> _memories = const [];
   String _query = '';
   bool _isLoading = true;
 
@@ -44,9 +53,11 @@ class _MemoryHubScreenState extends State<MemoryHubScreen> {
 
   Future<void> _load() async {
     final data = await widget.service.loadAll();
+    final memories = await widget.vault.loadAll();
     if (!mounted) return;
     setState(() {
       _data = data;
+      _memories = memories;
       _isLoading = false;
     });
   }
@@ -139,15 +150,18 @@ class _MemoryHubScreenState extends State<MemoryHubScreen> {
             onTap: () => _openSection(NotesScreen(store: widget.service.notes)),
           ),
           const SizedBox(height: AppSizes.gap),
-          const OverviewCard(
+          OverviewCard(
             icon: Icons.photo_album_rounded,
             accentColor: AppColors.reminder,
-            title: 'Personal Memories',
-            message: 'Photos and videos need a phone. Available in the '
-                'Android app, not in the browser.',
-            // No onTap: the card is visible so the section is discoverable,
-            // but it is honest about not being ready rather than opening an
-            // empty screen.
+            title: 'Memory Vault',
+            message: _countLabel(
+              _memories.length,
+              'memory',
+              'memories',
+              'Photos, videos and moments to revisit',
+            ),
+            onTap: () =>
+                _openSection(MemoryVaultScreen(service: widget.vault)),
           ),
         ],
         const SizedBox(height: AppSizes.gapLarge),

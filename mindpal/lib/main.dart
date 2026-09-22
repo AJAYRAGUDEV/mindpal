@@ -10,6 +10,7 @@ import 'services/ai_service.dart';
 import 'services/game_history_service.dart';
 import 'services/language_service.dart';
 import 'services/memory_aid_service.dart';
+import 'services/memory_vault_service.dart';
 import 'services/notification_service.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
@@ -110,6 +111,10 @@ Future<void> main() async {
       profileService: ProfileService(storage),
       reminderService: ReminderService(storage, notifications),
       memoryAidService: MemoryAidService(storage),
+      // Records go in the same storage as everything else; photo and video
+      // bytes go in the platform media store (files on Android, IndexedDB in
+      // the browser). The service opens that lazily on first use.
+      memoryVaultService: MemoryVaultService(storage),
       gameHistoryService: GameHistoryService(storage),
       aiService: aiService,
       languageService: languageService,

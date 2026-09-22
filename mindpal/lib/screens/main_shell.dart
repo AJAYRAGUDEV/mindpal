@@ -8,6 +8,7 @@ import '../models/user_profile.dart';
 import '../services/ai_service.dart';
 import '../services/game_history_service.dart';
 import '../services/memory_aid_service.dart';
+import '../services/memory_vault_service.dart';
 import '../services/profile_service.dart';
 import '../services/reminder_service.dart';
 import '../theme/app_sizes.dart';
@@ -59,6 +60,7 @@ class MainShell extends StatefulWidget {
     required this.profileService,
     required this.reminderService,
     required this.memoryAidService,
+    required this.memoryVaultService,
     required this.gameHistoryService,
     required this.aiService,
     this.storageHealthy = true,
@@ -67,6 +69,7 @@ class MainShell extends StatefulWidget {
   final ProfileService profileService;
   final ReminderService reminderService;
   final MemoryAidService memoryAidService;
+  final MemoryVaultService memoryVaultService;
   final GameHistoryService gameHistoryService;
   final AiService aiService;
 
@@ -316,7 +319,10 @@ class _MainShellState extends State<MainShell> {
         onToggleComplete: _toggleReminderComplete,
         onOpenReminder: _openReminderDetails,
       ),
-      MemoryHubScreen(service: widget.memoryAidService),
+      MemoryHubScreen(
+        service: widget.memoryAidService,
+        vault: widget.memoryVaultService,
+      ),
       ProfileScreen(profile: _profile, onSave: _saveProfile),
     ];
 
