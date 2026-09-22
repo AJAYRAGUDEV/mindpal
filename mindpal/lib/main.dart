@@ -12,6 +12,7 @@ import 'services/language_service.dart';
 import 'services/memory_aid_service.dart';
 import 'services/memory_vault_service.dart';
 import 'services/notification_service.dart';
+import 'services/notifications/notification_service_factory.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'storage/local_storage.dart';
@@ -43,9 +44,9 @@ Future<void> main() async {
   }
 
   // Notifications are optional: the reminder list works with or without them.
-  // Today this is always the do-nothing version, which is what lets the app
-  // run in Chrome. The real Android implementation is still to be built.
-  final NotificationService notifications = NoopNotificationService();
+  // Android gets real OS-scheduled alarms; the web gets a no-op, because a
+  // browser cannot ring at 8 PM with the tab closed. Chosen at compile time.
+  final NotificationService notifications = createNotificationService();
   await notifications.init();
 
   // The AI gateway URL is supplied at build time and is NOT a secret — the
@@ -110,6 +111,7 @@ Future<void> main() async {
     MindPalApp(
       profileService: ProfileService(storage),
       reminderService: ReminderService(storage, notifications),
+      notificationService: notifications,
       memoryAidService: MemoryAidService(storage),
       // Records go in the same storage as everything else; photo and video
       // bytes go in the platform media store (files on Android, IndexedDB in

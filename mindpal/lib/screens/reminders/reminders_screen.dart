@@ -18,6 +18,7 @@ class RemindersScreen extends StatelessWidget {
     required this.onAddReminder,
     required this.onToggleComplete,
     this.onOpenReminder,
+    this.alarmStatus,
   });
 
   final List<Reminder> reminders;
@@ -27,6 +28,12 @@ class RemindersScreen extends StatelessWidget {
   final void Function(int id, bool completed) onToggleComplete;
 
   final ValueChanged<Reminder>? onOpenReminder;
+
+  /// One short line about whether these reminders will actually ring, or
+  /// null while that is still being worked out. A reminder list that quietly
+  /// does nothing at the appointed time is worse than no list at all, so the
+  /// app says which of the two it is.
+  final ReminderAlarmStatus? alarmStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +66,10 @@ class RemindersScreen extends StatelessWidget {
             ),
           ],
         ),
+        if (alarmStatus != null) ...[
+          const SizedBox(height: AppSizes.gapSmall),
+          _AlarmStatusLine(status: alarmStatus!),
+        ],
         const SizedBox(height: AppSizes.gapLarge),
 
         // The big obvious button sits ABOVE the list, not hidden in a floating
@@ -209,6 +220,68 @@ class _EmptyState extends StatelessWidget {
           'a medicine, a meal, or an appointment.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
+    );
+  }
+}
+
+/// Whether reminders will ring, and why not when they will not.
+enum ReminderAlarmStatus {
+  /// Android, permission granted, exact alarms available.
+  ringing(
+    Icons.notifications_active_rounded,
+    'These will ring on time, even if the app is closed.',
+    AppColors.primaryDark,
+  ),
+
+  /// Android, permission granted, but the OS will not promise the minute.
+  ringingInexact(
+    Icons.notifications_rounded,
+    'These will ring, though your phone may delay them by a few minutes.',
+    AppColors.primaryDark,
+  ),
+
+  /// Android, notifications switched off for the app.
+  permissionDenied(
+    Icons.notifications_off_rounded,
+    'Notifications are off, so these will not ring. Turn them on in '
+        'phone Settings.',
+    AppColors.reminder,
+  ),
+
+  /// Web. A browser cannot wake a closed page at 8 PM.
+  unsupported(
+    Icons.info_outline_rounded,
+    'This is the web version, so reminders are shown here but will not '
+        'ring. The Android app rings.',
+    AppColors.textSecondary,
+  );
+
+  const ReminderAlarmStatus(this.icon, this.message, this.color);
+
+  final IconData icon;
+  final String message;
+  final Color color;
+}
+
+class _AlarmStatusLine extends StatelessWidget {
+  const _AlarmStatusLine({required this.status});
+
+  final ReminderAlarmStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(status.icon, size: 22, color: status.color),
+        const SizedBox(width: AppSizes.gapSmall),
+        Expanded(
+          child: Text(
+            status.message,
+            style: TextStyle(fontSize: 16, color: status.color),
+          ),
         ),
       ],
     );

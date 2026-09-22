@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
@@ -9,6 +11,7 @@ import '../services/ai_service.dart';
 import '../services/game_history_service.dart';
 import '../services/memory_aid_service.dart';
 import '../services/memory_vault_service.dart';
+import '../services/notification_service.dart';
 import '../services/profile_service.dart';
 import '../services/reminder_service.dart';
 import '../theme/app_sizes.dart';
@@ -59,6 +62,7 @@ class MainShell extends StatefulWidget {
     super.key,
     required this.profileService,
     required this.reminderService,
+    required this.notificationService,
     required this.memoryAidService,
     required this.memoryVaultService,
     required this.gameHistoryService,
@@ -68,6 +72,7 @@ class MainShell extends StatefulWidget {
 
   final ProfileService profileService;
   final ReminderService reminderService;
+  final NotificationService notificationService;
   final MemoryAidService memoryAidService;
   final MemoryVaultService memoryVaultService;
   final GameHistoryService gameHistoryService;
@@ -96,10 +101,31 @@ class _MainShellState extends State<MainShell> {
   bool _isLoading = true;
   String? _loadError;
 
+  StreamSubscription<int>? _notificationTaps;
+
+  /// Asked once per session at most. Android remembers the answer anyway;
+  /// this only stops the explanation dialog appearing twice in one sitting.
+  bool _askedForNotifications = false;
+
+  /// Whether reminders will actually ring. Null until checked.
+  ReminderAlarmStatus? _alarmStatus;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+
+    // A tap on a reminder notification while the app is running or in the
+    // background lands here: go to the Reminders tab, where the reminder is.
+    _notificationTaps = widget.notificationService.tapped.listen(
+      (_) => _openTab(AppTab.reminders),
+    );
+  }
+
+  @override
+  void dispose() {
+    _notificationTaps?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -124,6 +150,12 @@ class _MainShellState extends State<MainShell> {
       // mirror of them. Android can lose scheduled alarms (reinstall, some
       // battery savers), so we re-arm them from storage on every launch.
       await widget.reminderService.rescheduleAll(reminders);
+
+      await _refreshAlarmStatus();
+
+      // Cold start from a notification tap: open on the Reminders tab.
+      final launchedFrom = await widget.notificationService.launchReminderId();
+      if (launchedFrom != null && mounted) _openTab(AppTab.reminders);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -157,10 +189,92 @@ class _MainShellState extends State<MainShell> {
 
     if (!mounted || draft == null) return;
 
+    // The right moment to ask: the user has just written a reminder and is
+    // about to expect it to ring. Asking on first launch, before they know
+    // what the app does, gets a reflexive "no".
+    await _ensureNotificationPermission();
+    if (!mounted) return;
+
     await _runReminderAction(
       () => widget.reminderService.add(_reminders, draft),
       successMessage: 'Reminder saved.',
     );
+  }
+
+  /// Re-reads the OS state behind the one-line status on the Reminders tab.
+  Future<void> _refreshAlarmStatus() async {
+    final notifications = widget.notificationService;
+    ReminderAlarmStatus status;
+
+    if (!notifications.isSupported) {
+      status = ReminderAlarmStatus.unsupported;
+    } else if (!await notifications.hasPermission()) {
+      status = ReminderAlarmStatus.permissionDenied;
+    } else if (await notifications.canScheduleExactly()) {
+      status = ReminderAlarmStatus.ringing;
+    } else {
+      status = ReminderAlarmStatus.ringingInexact;
+    }
+
+    if (mounted) setState(() => _alarmStatus = status);
+  }
+
+  /// Explains, then asks. Never blocks saving: a denied permission means the
+  /// reminder is kept in the list without an alarm, and the user is told.
+  Future<void> _ensureNotificationPermission() async {
+    final notifications = widget.notificationService;
+    if (!notifications.isSupported) return;
+    if (await notifications.hasPermission()) return;
+    if (_askedForNotifications || !mounted) return;
+    _askedForNotifications = true;
+
+    final wantsToAllow = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          'Let MindPal remind you?',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'To ring at the right time, even when the app is closed, '
+              'MindPal needs permission to show notifications. Your phone '
+              'will ask next.',
+              style: TextStyle(fontSize: 20, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Continue'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Not now'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (wantsToAllow != true || !mounted) return;
+
+    final granted = await notifications.requestPermission();
+    await _refreshAlarmStatus();
+    if (!granted && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Notifications are off. Your reminders are saved, but they will '
+            'not ring until notifications are allowed in phone Settings.',
+            style: TextStyle(fontSize: 18),
+          ),
+          duration: Duration(seconds: 6),
+        ),
+      );
+    }
   }
 
   /// Opens the details screen and carries out whatever it decided.
@@ -317,6 +431,7 @@ class _MainShellState extends State<MainShell> {
         reminders: _reminders,
         onAddReminder: _addReminder,
         onToggleComplete: _toggleReminderComplete,
+        alarmStatus: _alarmStatus,
         onOpenReminder: _openReminderDetails,
       ),
       MemoryHubScreen(

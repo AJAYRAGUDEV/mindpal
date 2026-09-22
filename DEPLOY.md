@@ -167,13 +167,47 @@ uses the system photo picker, so no storage permission is declared or
 needed. In the browser the same files go into IndexedDB (per browser, per
 site; not shared between devices).
 
-**Permissions.** Our manifest declares `INTERNET` only. The video player
-library (ExoPlayer, via `video_player_android`) merges in two more:
-`ACCESS_NETWORK_STATE` and `WAKE_LOCK`. Both are "normal" permissions:
-granted at install, never prompted, not listed as sensitive. Local storage
-needs no permission, and the system photo picker needs none either. Camera,
-microphone, storage and notification permissions are *not* declared because
-the app has no feature that uses them.
+**Permissions.** Declared in our manifest:
+
+| Permission | Why |
+|---|---|
+| `INTERNET` | reach the AI gateway |
+| `RECEIVE_BOOT_COMPLETED` | re-arm reminder alarms after a reboot |
+| `USE_EXACT_ALARM` (Android 13+) | ring at 8:00, not "around 8". Granted at install, never prompts; Android reserves it for alarm/reminder apps |
+| `SCHEDULE_EXACT_ALARM` (Android 12 only, `maxSdkVersion=32`) | the same thing on Android 12, where it is granted by default |
+
+Merged in by libraries: `POST_NOTIFICATIONS` and `VIBRATE`
+(flutter_local_notifications), `ACCESS_NETWORK_STATE` and `WAKE_LOCK`
+(ExoPlayer). `POST_NOTIFICATIONS` is the only one that prompts the user, and
+the app asks for it with an explanation the first time a reminder is saved.
+Local storage and the system photo picker need no permission. Camera,
+microphone, storage, location and contacts are *not* declared.
+
+**Reminder notifications.** Scheduled with Android's AlarmManager through
+`flutter_local_notifications`; posted by the plugin's broadcast receiver at
+the scheduled minute, so they work with the app in the background or closed.
+Channel "MindPal Reminders", high importance, default sound, vibration. The
+user's own channel settings win: mute it in Settings and it stays muted.
+Alarms are re-registered after a reboot (boot receiver) and re-armed from the
+saved list on every app launch. Built and unit-tested; **delivery on a real
+phone has not yet been observed** — see the checklist below.
+
+To switch to permission-free inexact alarms (may ring a few minutes late in
+Doze): remove the two exact-alarm lines from the manifest; the app detects
+the missing permission and uses `inexactAllowWhileIdle` automatically.
+
+**Phone checklist for reminders** (do these once on a real device):
+
+1. Add a reminder 2-3 minutes ahead; allow notifications when asked.
+2. Press Home (background), then swipe the app away (closed).
+3. At the time: notification appears, sound plays, phone vibrates.
+4. Tap it: MindPal opens on the Reminders tab.
+5. Edit the time of a reminder: only the new time rings.
+6. Delete a reminder: nothing rings.
+7. Tick a reminder off before its time: nothing rings (daily: rings tomorrow).
+8. Reboot the phone with a reminder pending: it still rings.
+9. Settings > Apps > MindPal > Notifications > off: nothing rings; the list
+   still works.
 
 **Plain HTTP** is allowed in debug builds only (for a gateway on
 `http://localhost` during development). A release APK refuses cleartext, so

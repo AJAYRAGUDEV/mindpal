@@ -62,10 +62,20 @@ class ReminderService {
   /// saved list the source of truth and the alarms merely a mirror of it.
   Future<void> rescheduleAll(List<Reminder> reminders) async {
     if (!_notifications.isSupported) return;
+    final now = DateTime.now();
     try {
       await _notifications.cancelAll();
       for (final reminder in reminders) {
-        await _notifications.schedule(reminder);
+        // Same rules as setCompleted: nothing the user has already dealt
+        // with may ring again because the app was restarted.
+        if (reminder.repeat == ReminderRepeat.once &&
+            reminder.isCompletedOn(now)) {
+          continue;
+        }
+        final after = reminder.isCompletedOn(now)
+            ? DateTime(now.year, now.month, now.day + 1)
+            : now;
+        await _notifications.schedule(reminder, after: after);
       }
     } catch (error) {
       debugPrint('Could not reschedule reminders: $error');
@@ -117,24 +127,46 @@ class ReminderService {
     return updated;
   }
 
-  /// Ticks a reminder off (or un-ticks it) for a particular day.
+  /// Ticks a reminder off (or un-ticks it) for a particular day, and keeps
+  /// the alarm in step:
   ///
-  /// The alarm is NOT cancelled when a daily reminder is completed — it must
-  /// still ring tomorrow. Completion and scheduling are separate ideas.
+  ///   * a ONCE reminder ticked off is finished: its alarm is cancelled, so
+  ///     ticking it off at 7:30 means no ring at 8:00;
+  ///   * a DAILY reminder ticked off is done for TODAY only: its alarm is
+  ///     re-armed to start tomorrow, so it stays quiet today and rings again
+  ///     tomorrow as it should;
+  ///   * un-ticking either one re-arms it normally.
   Future<List<Reminder>> setCompleted(
     List<Reminder> current,
     int id, {
     required bool completed,
     required DateTime day,
   }) async {
+    Reminder? changed;
     final updated = [
       for (final reminder in current)
         if (reminder.id == id)
-          (completed ? reminder.markCompletedOn(day) : reminder.clearCompletion())
+          changed = (completed
+              ? reminder.markCompletedOn(day)
+              : reminder.clearCompletion())
         else
           reminder,
     ];
     await _persist(updated);
+
+    final reminder = changed;
+    if (reminder != null) {
+      if (!completed) {
+        await _safeSchedule(reminder);
+      } else if (reminder.repeat == ReminderRepeat.once) {
+        await _safeCancel(reminder.id);
+      } else {
+        // The first moment of tomorrow. nextOccurrenceAfter() then lands on
+        // tomorrow's time, and the daily repeat carries on from there.
+        final tomorrow = DateTime(day.year, day.month, day.day + 1);
+        await _safeSchedule(reminder, after: tomorrow);
+      }
+    }
     return updated;
   }
 
@@ -206,9 +238,9 @@ class ReminderService {
   /// The reminder is already saved by the time these run. If the alarm cannot
   /// be set (permission denied, unsupported platform), we log it and carry on
   /// — the reminder still exists and still shows in the list.
-  Future<void> _safeSchedule(Reminder reminder) async {
+  Future<void> _safeSchedule(Reminder reminder, {DateTime? after}) async {
     try {
-      await _notifications.schedule(reminder);
+      await _notifications.schedule(reminder, after: after);
     } catch (error) {
       debugPrint('Could not schedule "${reminder.title}": $error');
     }

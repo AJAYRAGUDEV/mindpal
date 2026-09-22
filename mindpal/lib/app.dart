@@ -9,6 +9,8 @@ import 'services/game_history_service.dart';
 import 'services/language_service.dart';
 import 'services/memory_aid_service.dart';
 import 'services/memory_vault_service.dart';
+import 'models/reminder.dart';
+import 'services/notification_service.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'theme/app_theme.dart';
@@ -24,6 +26,7 @@ class MindPalApp extends StatefulWidget {
     super.key,
     required this.profileService,
     required this.reminderService,
+    this.notificationService = const _NoNotifications(),
     required this.memoryAidService,
     required this.memoryVaultService,
     required this.gameHistoryService,
@@ -35,6 +38,12 @@ class MindPalApp extends StatefulWidget {
 
   final ProfileService profileService;
   final ReminderService reminderService;
+
+  /// Only for the two things the shell needs directly: asking permission at
+  /// the right moment, and opening the Reminders tab when a notification is
+  /// tapped. Scheduling itself stays inside ReminderService.
+  final NotificationService notificationService;
+
   final MemoryAidService memoryAidService;
   final MemoryVaultService memoryVaultService;
   final GameHistoryService gameHistoryService;
@@ -89,6 +98,7 @@ class _MindPalAppState extends State<MindPalApp> {
         home: MainShell(
           profileService: widget.profileService,
           reminderService: widget.reminderService,
+          notificationService: widget.notificationService,
           memoryAidService: widget.memoryAidService,
           memoryVaultService: widget.memoryVaultService,
           gameHistoryService: widget.gameHistoryService,
@@ -98,4 +108,31 @@ class _MindPalAppState extends State<MindPalApp> {
       ),
     );
   }
+}
+
+/// A const no-op for call sites that do not care about notifications (tests).
+/// NoopNotificationService itself is not const-constructible.
+class _NoNotifications implements NotificationService {
+  const _NoNotifications();
+
+  @override
+  bool get isSupported => false;
+  @override
+  Future<void> init() async {}
+  @override
+  Future<bool> hasPermission() async => false;
+  @override
+  Future<bool> requestPermission() async => false;
+  @override
+  Future<bool> canScheduleExactly() async => false;
+  @override
+  Future<void> schedule(Reminder reminder, {DateTime? after}) async {}
+  @override
+  Future<void> cancel(int reminderId) async {}
+  @override
+  Future<void> cancelAll() async {}
+  @override
+  Stream<int> get tapped => const Stream.empty();
+  @override
+  Future<int?> launchReminderId() async => null;
 }

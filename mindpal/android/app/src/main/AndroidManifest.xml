@@ -4,6 +4,32 @@
          generative features. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Reminder notifications.
+
+         POST_NOTIFICATIONS (Android 13+) and VIBRATE are declared by the
+         flutter_local_notifications plugin itself and merged in; they are not
+         repeated here. The app asks for POST_NOTIFICATIONS in the UI, with an
+         explanation, the first time a reminder is saved.
+
+         RECEIVE_BOOT_COMPLETED: Android drops every scheduled alarm on
+         reboot. This lets the plugin's boot receiver (below) re-arm them, so
+         a reminder set on Monday still rings on Tuesday after a restart.
+
+         USE_EXACT_ALARM (Android 13+): fire at 8:00, not "around 8". Granted
+         at install, never prompts; Android reserves it for alarm-clock,
+         calendar and reminder apps, which is what this is. SCHEDULE_EXACT_ALARM
+         covers Android 12 only (also granted by default there); on 14+ it
+         would need a Settings trip, so it is capped at API 32 and never
+         reached on newer phones. If exact scheduling is refused anyway, the
+         app falls back to inexact alarms rather than none.
+
+         NOT declared: camera, microphone, storage, location, contacts. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32"/>
+
     <application
         android:label="MindPal"
         android:name="${applicationName}"
@@ -35,6 +61,25 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- flutter_local_notifications. The first receiver is what Android
+             wakes at the scheduled minute to post the notification: no Dart
+             code is involved, so it works with the app closed. The second
+             re-registers every pending notification after a reboot or an app
+             update. Both are exported=false: only the system may invoke them. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

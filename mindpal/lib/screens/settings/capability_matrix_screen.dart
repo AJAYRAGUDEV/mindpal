@@ -35,6 +35,7 @@ class CapabilityMatrixScreen extends StatelessWidget {
               const SizedBox(height: AppSizes.gap),
             ],
 
+            const _DeviceFeatures(),
             const SizedBox(height: AppSizes.gap),
             const _Legend(),
             const SizedBox(height: AppSizes.gapLarge),
@@ -230,6 +231,61 @@ class _Legend extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Features that depend on the device rather than on a language.
+///
+/// Statuses here are set by hand, deliberately, and must be updated when the
+/// facts change. As of 22 September 2026: reminder notifications are built
+/// for Android (OS-scheduled alarms, sound, vibration, reboot recovery) and
+/// verified as far as compiling, packaging and unit tests go, but have NOT
+/// yet been watched firing on a real phone. That is exactly what "untested"
+/// means here, and it stays until someone has seen the notification appear.
+class _DeviceFeatures extends StatelessWidget {
+  const _DeviceFeatures();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.cardPadding),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppSizes.radius),
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Device features',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: AppSizes.gap),
+          const _CapabilityLine(
+            label: 'Reminder notifications, Android',
+            status: CapabilityStatus.untested,
+          ),
+          const _CapabilityLine(
+            label: 'Reminder notifications, web',
+            status: CapabilityStatus.notAvailable,
+          ),
+          const _CapabilityLine(
+            label: 'Memory Vault photos and videos',
+            status: CapabilityStatus.experimental,
+          ),
+          const SizedBox(height: AppSizes.gapSmall),
+          const Text(
+            "Android reminders use the phone's own alarm system, with sound "
+            'and vibration, and are re-armed after a reboot. Built and '
+            'unit-tested; delivery on a real phone has not yet been observed. '
+            'A browser cannot ring with the page closed, so the web version '
+            'keeps the reminder list without alarms.',
+            style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }
