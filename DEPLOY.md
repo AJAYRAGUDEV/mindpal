@@ -12,6 +12,28 @@ source, never in `build/web`, never in git.
 
 ---
 
+## Live as of 22 September 2026
+
+Backend: **https://mindpal-1.onrender.com** — verified answering real Gemini
+requests. Build both frontends against this URL:
+
+```bash
+flutter build web --release --dart-define=API_BASE_URL=https://mindpal-1.onrender.com
+flutter build apk --release --dart-define=API_BASE_URL=https://mindpal-1.onrender.com
+```
+
+`ALLOWED_ORIGIN` is unset, so CORS is `*`. That is fine here: the gateway has
+no auth, no cookies and no user data of its own. Once the Vercel URL is
+final, setting it tightens things without changing anything else.
+
+**If you create the Render service by hand rather than as a Blueprint, the
+dashboard settings override `render.yaml` completely.** Root Directory must
+be `server` and the build command `npm ci --omit=dev`; leaving them at the
+defaults makes `npm start` fail with "Could not read package.json", because
+this repo has no package.json at its root.
+
+---
+
 ## 1. Backend on Render
 
 The backend is **Node/Express**, not FastAPI — there is no Python in this
