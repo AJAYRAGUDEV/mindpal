@@ -135,4 +135,8 @@ class _NoNotifications implements NotificationService {
   Stream<int> get tapped => const Stream.empty();
   @override
   Future<int?> launchReminderId() async => null;
+  @override
+  Future<void> showTestNotification() async {}
+  @override
+  Future<int> pendingCount() async => 0;
 }

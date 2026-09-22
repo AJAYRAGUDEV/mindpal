@@ -26,6 +26,7 @@ import 'profile_screen.dart';
 import 'reminders/add_reminder_screen.dart';
 import 'reminders/reminder_details_screen.dart';
 import 'reminders/reminders_screen.dart';
+import 'settings/notification_check_screen.dart';
 
 /// Named tab indexes.
 ///
@@ -197,8 +198,34 @@ class _MainShellState extends State<MainShell> {
 
     await _runReminderAction(
       () => widget.reminderService.add(_reminders, draft),
-      successMessage: 'Reminder saved.',
+      // WHEN it will ring, not just that it saved.
+      //
+      // The form asks for a time but not a date, so a time that has already
+      // gone by today is scheduled for tomorrow. That is the right behaviour
+      // and it used to be invisible: the user set 9:00 at 9:30, waited, and
+      // concluded the app was broken.
+      successMessage: 'Reminder saved. '
+          '${_nextRingDescription(draft, DateTime.now())}',
     );
+  }
+
+  /// "It will ring at 8:00 PM." / "It will ring tomorrow at 8:00 AM."
+  String _nextRingDescription(Reminder reminder, DateTime now) {
+    final next = reminder.nextOccurrenceAfter(now);
+    final isTomorrow = next.day != now.day;
+    return isTomorrow
+        ? 'It will ring tomorrow at ${reminder.formattedTime}.'
+        : 'It will ring at ${reminder.formattedTime}.';
+  }
+
+  Future<void> _openNotificationCheck() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            NotificationCheckScreen(notifications: widget.notificationService),
+      ),
+    );
+    if (mounted) await _refreshAlarmStatus();
   }
 
   /// Re-reads the OS state behind the one-line status on the Reminders tab.
@@ -432,6 +459,7 @@ class _MainShellState extends State<MainShell> {
         onAddReminder: _addReminder,
         onToggleComplete: _toggleReminderComplete,
         alarmStatus: _alarmStatus,
+        onCheckNotifications: _openNotificationCheck,
         onOpenReminder: _openReminderDetails,
       ),
       MemoryHubScreen(

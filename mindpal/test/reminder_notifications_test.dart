@@ -33,6 +33,11 @@ class _RecordingNotifications implements NotificationService {
   Stream<int> get tapped => const Stream.empty();
   @override
   Future<int?> launchReminderId() async => null;
+  @override
+  Future<void> showTestNotification() async => log.add('test');
+  @override
+  Future<int> pendingCount() async =>
+      log.where((line) => line.startsWith('schedule')).length;
 }
 
 void main() {

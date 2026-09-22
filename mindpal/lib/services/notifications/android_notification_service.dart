@@ -147,7 +147,50 @@ class AndroidNotificationService implements NotificationService {
   }
 
   @override
-  Future<bool> canScheduleExactly() async => _ready && _exact;
+  Future<bool> canScheduleExactly() async {
+    if (!_ready) return false;
+    // Re-read rather than trusting what init() saw. The user can grant or
+    // revoke exact alarms in Settings while the app is running, and a stale
+    // "no" would quietly downgrade every reminder for the rest of the session.
+    _exact = await _android?.canScheduleExactNotifications() ?? false;
+    return _exact;
+  }
+
+  @override
+  Future<int> pendingCount() async {
+    if (!_ready) return 0;
+    try {
+      final pending = await _plugin.pendingNotificationRequests();
+      return pending.length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  @override
+  Future<void> showTestNotification() async {
+    if (!_ready) {
+      throw StateError('Notifications did not start on this device.');
+    }
+    // id 0 is reserved for this: reminder ids start at 1, so a test can never
+    // overwrite a real reminder's notification.
+    await _plugin.show(
+      id: 0,
+      title: 'MindPal is working',
+      body: 'This is a test. Your reminders will look like this.',
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          channelName,
+          channelDescription: channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+        ),
+      ),
+    );
+  }
 
   @override
   Future<void> schedule(Reminder reminder, {DateTime? after}) async {
@@ -164,6 +207,8 @@ class AndroidNotificationService implements NotificationService {
     final body = reminder.notes.trim().isEmpty
         ? '${reminder.category.label} · ${reminder.formattedTime}'
         : reminder.notes.trim();
+
+    final exact = await canScheduleExactly();
 
     await _plugin.zonedSchedule(
       id: reminder.id,
@@ -190,7 +235,7 @@ class AndroidNotificationService implements NotificationService {
           autoCancel: true,
         ),
       ),
-      androidScheduleMode: _exact
+      androidScheduleMode: exact
           ? AndroidScheduleMode.exactAllowWhileIdle
           : AndroidScheduleMode.inexactAllowWhileIdle,
       // A daily reminder repeats at the same wall-clock time every day; a
@@ -201,7 +246,7 @@ class AndroidNotificationService implements NotificationService {
     );
 
     debugPrint('NOTIFICATIONS: scheduled #${reminder.id} for $when '
-        '(${reminder.repeat.name}, ${_exact ? 'exact' : 'inexact'})');
+        '(${reminder.repeat.name}, ${exact ? 'exact' : 'inexact'})');
   }
 
   @override

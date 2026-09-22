@@ -19,6 +19,7 @@ class RemindersScreen extends StatelessWidget {
     required this.onToggleComplete,
     this.onOpenReminder,
     this.alarmStatus,
+    this.onCheckNotifications,
   });
 
   final List<Reminder> reminders;
@@ -34,6 +35,9 @@ class RemindersScreen extends StatelessWidget {
   /// does nothing at the appointed time is worse than no list at all, so the
   /// app says which of the two it is.
   final ReminderAlarmStatus? alarmStatus;
+
+  /// Opens the "are reminders working?" screen.
+  final VoidCallback? onCheckNotifications;
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +72,10 @@ class RemindersScreen extends StatelessWidget {
         ),
         if (alarmStatus != null) ...[
           const SizedBox(height: AppSizes.gapSmall),
-          _AlarmStatusLine(status: alarmStatus!),
+          _AlarmStatusLine(
+            status: alarmStatus!,
+            onTap: onCheckNotifications,
+          ),
         ],
         const SizedBox(height: AppSizes.gapLarge),
 
@@ -266,13 +273,14 @@ enum ReminderAlarmStatus {
 }
 
 class _AlarmStatusLine extends StatelessWidget {
-  const _AlarmStatusLine({required this.status});
+  const _AlarmStatusLine({required this.status, this.onTap});
 
   final ReminderAlarmStatus status;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final row = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(status.icon, size: 22, color: status.color),
@@ -283,7 +291,20 @@ class _AlarmStatusLine extends StatelessWidget {
             style: TextStyle(fontSize: 16, color: status.color),
           ),
         ),
+        if (onTap != null)
+          Icon(Icons.chevron_right_rounded, size: 24, color: status.color),
       ],
+    );
+
+    if (onTap == null) return row;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSizes.radius),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: row,
+      ),
     );
   }
 }

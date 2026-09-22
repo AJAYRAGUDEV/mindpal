@@ -57,6 +57,22 @@ abstract class NotificationService {
   /// If the app was launched cold by tapping a notification, the id of that
   /// reminder; otherwise null. Read once at startup.
   Future<int?> launchReminderId();
+
+  /// Posts a notification immediately, for the "is this thing on?" button.
+  ///
+  /// Deliberately separate from [schedule]: it proves the channel, the
+  /// permission, the icon and the sound in one tap, with no waiting and no
+  /// alarm involved. If this rings but a reminder does not, the problem is
+  /// scheduling; if this does not ring either, the problem is permission or
+  /// the channel. That split is most of the diagnosis.
+  ///
+  /// Throws on failure rather than swallowing it, so the screen can say what
+  /// went wrong.
+  Future<void> showTestNotification();
+
+  /// How many alarms the OS currently holds for this app. The honest answer
+  /// to "did it actually schedule anything?".
+  Future<int> pendingCount();
 }
 
 /// A notification service that does nothing, successfully.
@@ -104,4 +120,12 @@ class NoopNotificationService implements NotificationService {
 
   @override
   Future<int?> launchReminderId() async => null;
+
+  @override
+  Future<void> showTestNotification() async {
+    throw UnsupportedError('Notifications are not available on this platform.');
+  }
+
+  @override
+  Future<int> pendingCount() async => 0;
 }
