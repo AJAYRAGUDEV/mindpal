@@ -167,11 +167,13 @@ uses the system photo picker, so no storage permission is declared or
 needed. In the browser the same files go into IndexedDB (per browser, per
 site; not shared between devices).
 
-**Permissions.** The manifest declares `INTERNET` only. Local storage
-(`shared_preferences`) needs no permission. Camera, microphone, and
-notification permissions are *not* declared because the app has no feature
-that uses them; declaring permissions the app never exercises would only
-raise questions.
+**Permissions.** Our manifest declares `INTERNET` only. The video player
+library (ExoPlayer, via `video_player_android`) merges in two more:
+`ACCESS_NETWORK_STATE` and `WAKE_LOCK`. Both are "normal" permissions:
+granted at install, never prompted, not listed as sensitive. Local storage
+needs no permission, and the system photo picker needs none either. Camera,
+microphone, storage and notification permissions are *not* declared because
+the app has no feature that uses them.
 
 **Plain HTTP** is allowed in debug builds only (for a gateway on
 `http://localhost` during development). A release APK refuses cleartext, so
