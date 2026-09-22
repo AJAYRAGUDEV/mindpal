@@ -100,6 +100,49 @@ If it falls back, check the Render logs. The gateway prints the reason.
 
 ---
 
+## 3. Android APK (same codebase)
+
+The APK is built from the same source as the web app. The backend URL goes in
+the same way:
+
+```bash
+cd mindpal
+flutter build apk --release --dart-define=API_BASE_URL=https://YOUR-SERVICE.onrender.com
+```
+
+Output: `mindpal/build/app/outputs/flutter-apk/app-release.apk`. Copy it to a
+phone and open it; allow "install from unknown sources" when asked.
+
+The APK contains the backend URL and nothing else. The Gemini key is not in
+it — the app talks only to the gateway, exactly as the web build does.
+
+**Permissions.** The manifest declares `INTERNET` only. Local storage
+(`shared_preferences`) needs no permission. Camera, microphone, and
+notification permissions are *not* declared because the app has no feature
+that uses them; declaring permissions the app never exercises would only
+raise questions.
+
+**Plain HTTP** is allowed in debug builds only (for a gateway on
+`http://localhost` during development). A release APK refuses cleartext, so
+the production gateway must be HTTPS — which Render is.
+
+**Signing.** The release build is signed with the debug keystore, which is
+fine for a demo installed by hand. Publishing to the Play Store would need a
+real keystore; see `android/app/build.gradle.kts`.
+
+**On this particular PC** the Gradle daemon needs one environment variable or
+it dies on startup (`A new daemon was started but could not be connected to`).
+Run once:
+
+```bash
+setx JAVA_TOOL_OPTIONS "-Djdk.net.unixdomain.tmpdir=C:\gtmp"
+```
+
+and open a new terminal. The directory `C:\gtmp` must exist. The reason is
+explained in `android/gradle.properties`.
+
+---
+
 ## Environment variables, in one place
 
 **Render (backend)** — `GEMINI_API_KEY`, `GEMINI_MODEL`, `ALLOWED_ORIGIN`,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'app.dart';
@@ -55,6 +57,34 @@ Future<void> main() async {
   final AiService aiService = gatewayUrl.isEmpty
       ? const DeterministicAiService()
       : GeminiAiService(client: AiGatewayClient(baseUrl: gatewayUrl));
+
+  // Wake the backend as soon as the app opens.
+  //
+  // Free hosting tiers put a service to sleep after a few idle minutes, and
+  // the request that wakes it waits 30-60 seconds for the container to boot.
+  // If that request is the user's first question, the app looks broken.
+  //
+  // So we send a cheap health check at launch instead. The user spends those
+  // seconds reading the home screen, and by the time they open the companion
+  // the service is already up.
+  //
+  // unawaited() on purpose: startup must not wait for this, and a failure is
+  // not an error — it just means the app carries on offline, which it is
+  // designed to do.
+  if (aiService is GeminiAiService) {
+    unawaited(
+      aiService
+          .checkAvailable()
+          .then(
+            (awake) => debugPrint(
+              awake ? 'BACKEND: awake' : 'BACKEND: not reachable yet',
+            ),
+          )
+          // checkAvailable already swallows its errors; this is belt and
+          // braces so a startup failure can never surface to the user.
+          .catchError((Object _) {}),
+    );
+  }
 
   // Printed on every launch, because "why is it always offline?" is otherwise
   // invisible: a missing --dart-define looks exactly like a dead server.
