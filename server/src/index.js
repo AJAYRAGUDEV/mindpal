@@ -45,6 +45,30 @@ app.use(express.json({ limit: '32kb' }));
 const cache = new TtlCache();
 const limiter = new RateLimiter({ maxPerMinute: config.maxRequestsPerMinute });
 
+// A short id per request so the lines for one request can be found together
+// in the Render log. Not a secret, not stable across restarts, not meant to be.
+let requestCounter = 0;
+
+/**
+ * What gets logged about a request, and deliberately what does not.
+ *
+ * Logged: task, language, the LENGTH of the question, how many context
+ * records travelled, the origin, the model that answered, timing, outcome.
+ * Never logged: the question itself, the context records, or anything from
+ * the environment. The question is personal ("who is my daughter?") and the
+ * context is the user's own vault. A debugging log is not a place for either.
+ */
+function describeRequest(payload, request) {
+  return [
+    `task=${payload.task}`,
+    `lang=${payload.language}`,
+    `input=${payload.userInput.length}ch`,
+    `ctx=${payload.context.length}`,
+    `history=${payload.history.length}`,
+    `origin=${request.get('origin') ?? '-'}`,
+  ].join(' ');
+}
+
 /// Opening the bare root URL in a browser is the first thing anyone does, and
 /// a bare 404 there looks like the server is broken when it is fine. This says
 /// what the server is and where the real endpoints are.
@@ -71,6 +95,7 @@ app.get('/api/health', (_request, response) => {
     ok: true,
     geminiConfigured: isGeminiConfigured(),
     model: config.model,
+    fallbackModels: config.fallbackModels,
   });
 });
 
@@ -83,8 +108,14 @@ app.post('/api/ai', async (request, response) => {
   }
 
   const payload = validation.value;
+  const id = `#${++requestCounter}`;
+  const started = Date.now();
+  const log = (line) => console.log(`[ai] ${id} ${line}`);
+
+  log(describeRequest(payload, request));
 
   if (!limiter.tryConsume()) {
+    log('rejected: rate limit');
     return response.status(429).json({
       success: false,
       code: AiErrorCode.rateLimited,
@@ -97,40 +128,47 @@ app.post('/api/ai', async (request, response) => {
   const cacheKey = TtlCache.keyFor(payload);
   const cached = cache.get(cacheKey);
   if (cached !== undefined) {
+    log(`ok (cached) ${Date.now() - started}ms`);
     return response.json({ ...cached, cached: true });
   }
 
   try {
-    const result = await runTask(payload);
+    const result = await runTask(payload, log);
 
     cache.set(cacheKey, result);
+    log(`ok model=${result.model} ${Date.now() - started}ms`);
     return response.json({ ...result, cached: false });
   } catch (error) {
     if (error instanceof GatewayError) {
+      const attempts = (error.attempts ?? []).join(', ');
+      log(`FAILED code=${error.code} attempts=[${attempts}] ${Date.now() - started}ms`);
       return response.status(error.httpStatus).json({
         success: false,
         code: error.code,
         error: redact(error.message),
+        // Lets the app say "please try again" only when that is true.
+        retryable: error.retryable,
       });
     }
 
-    console.error('Unexpected gateway failure:', redact(String(error)));
+    console.error(`[ai] ${id} unexpected failure:`, redact(String(error)));
     return response.status(500).json({
       success: false,
       code: 'server_error',
       error: 'The AI gateway hit an unexpected problem.',
+      retryable: true,
     });
   }
 });
 
-function runTask(payload) {
+function runTask(payload, log) {
   switch (payload.task) {
     case 'memory_assistant':
-      return handleMemoryAssistant(payload);
+      return handleMemoryAssistant(payload, log);
     case 'general_knowledge':
-      return handleGeneralKnowledge(payload);
+      return handleGeneralKnowledge(payload, log);
     default:
-      return handleGameQuestions(payload);
+      return handleGameQuestions(payload, log);
   }
 }
 
@@ -143,12 +181,13 @@ function runTask(payload) {
  * would reject every correct answer here. The protection on this path is that
  * it is given no personal data at all.
  */
-async function handleGeneralKnowledge(payload) {
-  const data = await callGemini({
+async function handleGeneralKnowledge(payload, log) {
+  const { data, model } = await callGemini({
     systemInstruction: GENERAL_SYSTEM,
     prompt: buildGeneralPrompt(payload),
     schema: GENERAL_SCHEMA,
     maxOutputTokens: 1536,
+    log,
   });
 
   const answer = typeof data.answer === 'string' ? data.answer.trim() : '';
@@ -162,6 +201,7 @@ async function handleGeneralKnowledge(payload) {
   return {
     success: true,
     text: answer,
+    model,
     languageUsed:
       typeof data.languageUsed === 'string' && data.languageUsed.trim()
         ? data.languageUsed.trim()
@@ -169,12 +209,13 @@ async function handleGeneralKnowledge(payload) {
   };
 }
 
-async function handleMemoryAssistant(payload) {
-  const data = await callGemini({
+async function handleMemoryAssistant(payload, log) {
+  const { data, model } = await callGemini({
     systemInstruction: MEMORY_ASSISTANT_SYSTEM,
     prompt: buildMemoryPrompt(payload),
     schema: MEMORY_ASSISTANT_SCHEMA,
     maxOutputTokens: 1024,
+    log,
   });
 
   const answer = typeof data.answer === 'string' ? data.answer.trim() : '';
@@ -188,6 +229,7 @@ async function handleMemoryAssistant(payload) {
   return {
     success: true,
     text: answer,
+    model,
     hasEnoughInformation: data.hasEnoughInformation !== false,
     // What the model says it actually wrote in. The app compares this with
     // what it asked for, and tells the user when the two differ.
@@ -198,12 +240,13 @@ async function handleMemoryAssistant(payload) {
   };
 }
 
-async function handleGameQuestions(payload) {
-  const data = await callGemini({
+async function handleGameQuestions(payload, log) {
+  const { data, model } = await callGemini({
     systemInstruction: GAME_SYSTEM,
     prompt: buildGamePrompt(payload),
     schema: GAME_SCHEMA,
     maxOutputTokens: 4096,
+    log,
   });
 
   const raw = Array.isArray(data.questions) ? data.questions : [];
@@ -229,7 +272,7 @@ async function handleGameQuestions(payload) {
       sourceMemory: item.sourceMemory.trim(),
     }));
 
-  return { success: true, questions };
+  return { success: true, questions, model };
 }
 
 app.use((_request, response) => {
@@ -239,6 +282,11 @@ app.use((_request, response) => {
 app.listen(config.port, () => {
   console.log(`MindPal AI gateway listening on http://localhost:${config.port}`);
   console.log(`Model: ${config.model}`);
+  console.log(
+    config.fallbackModels.length > 0
+      ? `Fallback models: ${config.fallbackModels.join(', ')}`
+      : 'Fallback models: none',
+  );
   console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
   console.log(
     isGeminiConfigured()

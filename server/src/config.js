@@ -9,11 +9,26 @@
 
 export const config = {
   apiKey: process.env.GEMINI_API_KEY ?? '',
-  model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+  // The first model to try. The default was chosen by measurement, not
+  // preference: see the note on callGemini() in gemini.js. Override with
+  // GEMINI_MODEL, and verify the name with `npm run check` first.
+  model: process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite',
+
+  // Tried in order when the first model is overloaded (503), retired (404),
+  // rate-limited (429) or times out. Comma-separated. Empty disables.
+  fallbackModels: (
+    process.env.GEMINI_FALLBACK_MODELS ??
+    'gemini-3.1-flash-lite,gemini-3-flash-preview'
+  )
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean),
   port: Number(process.env.PORT ?? 8787),
   allowedOrigin: process.env.ALLOWED_ORIGIN ?? '*',
   maxRequestsPerMinute: Number(process.env.MAX_REQUESTS_PER_MINUTE ?? 20),
-  requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 15000),
+  // Per model attempt, not per request. Three attempts at 12s each fit
+  // inside the app's 45s client timeout with room for a Render cold start.
+  requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 12000),
 
   // Newer Gemini models "think" before answering, and those thinking tokens
   // come out of the same budget as the reply. Set GEMINI_THINKING_BUDGET=0 to
@@ -24,6 +39,11 @@ export const config = {
       ? null
       : Number(process.env.GEMINI_THINKING_BUDGET),
 };
+
+/** Primary model first, then fallbacks, with duplicates removed. */
+Object.defineProperty(config, 'modelChain', {
+  get: () => [...new Set([config.model, ...config.fallbackModels])],
+});
 
 export const isGeminiConfigured = () => config.apiKey.trim().length > 0;
 

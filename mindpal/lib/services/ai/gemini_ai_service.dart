@@ -57,6 +57,16 @@ class GeminiAiService implements AiService {
   /// generated or came from the offline logic. Never inferred — recorded.
   AiDelivery lastDelivery = AiDelivery.deterministic;
 
+  /// Why the last generative call failed, or null if it did not fail.
+  ///
+  /// Before this existed, every failure collapsed into "use the offline
+  /// answer" and the screen told the user it was offline, which was false
+  /// whenever the gateway was reachable but the model was overloaded. A
+  /// user who is told "offline" checks their Wi-Fi; a user who is told
+  /// "temporarily unavailable, try again" tries again. Only one of those
+  /// helps.
+  AiErrorCode? lastError;
+
   Future<bool> checkAvailable() => client.checkAvailable();
 
   // ------------------------------------------------------- memory assistant
@@ -98,6 +108,7 @@ class GeminiAiService implements AiService {
         languageCode: language.code,
         context: context,
       );
+      lastError = null;
 
       // The model itself says it did not have enough to go on: trust that
       // over its own prose, and use ours.
@@ -141,6 +152,7 @@ class GeminiAiService implements AiService {
     } on AiException catch (error) {
       debugPrint('Smart answer unavailable (${error.code.name}); using '
           'the offline assistant.');
+      lastError = error.code;
       lastDelivery = AiDelivery.deterministic;
       return local;
     }
@@ -248,6 +260,7 @@ class GeminiAiService implements AiService {
         languageCode: language.code,
         history: history,
       );
+      lastError = null;
 
       if (response.text.isEmpty) {
         lastDelivery = AiDelivery.deterministic;
@@ -260,6 +273,7 @@ class GeminiAiService implements AiService {
       return response.text;
     } on AiException catch (error) {
       debugPrint('General answer unavailable (${error.code.name}).');
+      lastError = error.code;
       lastDelivery = AiDelivery.deterministic;
       return null;
     }
@@ -289,6 +303,7 @@ class GeminiAiService implements AiService {
         count: count,
         optionCount: PersonalizedGameService.optionCount,
       );
+      lastError = null;
 
       // Everything the model produced is checked against the live database.
       // Anything unproven is dropped, not repaired.
@@ -312,6 +327,7 @@ class GeminiAiService implements AiService {
     } on AiException catch (error) {
       debugPrint('Smart questions unavailable (${error.code.name}); using '
           'the offline generator.');
+      lastError = error.code;
       lastDelivery = AiDelivery.deterministic;
       return deterministic;
     }

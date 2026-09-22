@@ -26,7 +26,10 @@ class AiGatewayClient {
   final String baseUrl;
   final http.Client _http;
 
-  static const Duration _timeout = Duration(seconds: 20);
+  /// Long, on purpose. A free Render instance takes 30-50s to wake from
+  /// sleep, and the gateway may try up to three models at 12s each. A 20s
+  /// timeout here turned every cold start into a false "offline".
+  static const Duration _timeout = Duration(seconds: 45);
 
   bool get isConfigured => baseUrl.trim().isNotEmpty;
 
@@ -126,6 +129,12 @@ class AiGatewayClient {
     }
 
     if (response.statusCode != 200 || body['success'] != true) {
+      // Status and code only. The body may echo nothing personal, but the
+      // rule is simpler to keep if the log never carries response text.
+      debugPrint(
+        'AI gateway: HTTP ${response.statusCode} code=${body['code']} '
+        'retryable=${body['retryable']}',
+      );
       throw AiException(
         AiErrorCode.fromName(body['code'] as String?),
         body['error'] as String?,

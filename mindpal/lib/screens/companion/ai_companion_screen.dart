@@ -253,13 +253,29 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
     if (!mounted) return false;
 
     if (text == null) {
-      // No generative path. Say so plainly rather than implying the offline
-      // answer came from a model.
+      // No answer. There are two very different reasons and the user needs
+      // to be told which one it was:
+      //
+      //   - the app has no backend configured, or the backend is not set up:
+      //     nothing the user does will change that, so do not say "try again"
+      //   - the backend was reached but the model failed or timed out:
+      //     trying again in a moment usually works, so offer that
+      //
+      // The old text said "I am offline" for both, which sent people to check
+      // their Wi-Fi when the Wi-Fi was fine.
+      final service = widget.aiService;
+      final error = service is GeminiAiService ? service.lastError : null;
+      final retryable = error != null && error.isRetryable;
+
       _addCompanionMessage(
-        text: 'I am offline just now, so I cannot answer general questions.'
-            '\n\nI can still help with the people, places and notes you have '
-            'saved, and with your reminders.',
+        text: retryable
+            ? '${error.message}\n\nI can still help with the people, places '
+                'and notes you have saved, and with your reminders.'
+            : 'I cannot answer general questions on this app right now.'
+                '\n\nI can still help with the people, places and notes you '
+                'have saved, and with your reminders.',
         kind: AnswerKind.general,
+        isError: retryable,
         followUps: const [ChatFollowUp.askAnother, ChatFollowUp.playGame],
       );
       return true;
@@ -277,8 +293,10 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
     _addCompanionMessage(
       text: text,
       kind: AnswerKind.general,
+      // Not _deliveryLabel: that wording ("from your saved record") is for
+      // personal answers. A general answer came from nothing of the user's.
       delivery: service is GeminiAiService
-          ? _deliveryLabel(service.lastDelivery)
+          ? _generalDeliveryLabel(service.lastDelivery)
           : null,
       followUps: const [ChatFollowUp.askAnother, ChatFollowUp.playGame],
     );
@@ -319,6 +337,7 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
     AnswerSource source = AnswerSource.none,
     String? delivery,
     List<ChatFollowUp> followUps = const [],
+    bool isError = false,
   }) {
     if (!mounted) return;
     setState(() {
@@ -330,12 +349,21 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
           source: source,
           delivery: delivery,
           followUps: followUps,
+          // Shows the bubble's own "Try again" button, wired to _lastQuestion.
+          isError: isError,
         ),
       );
       _isThinking = false;
     });
     _scrollToEnd();
   }
+
+  String _generalDeliveryLabel(AiDelivery delivery) => switch (delivery) {
+    AiDelivery.deterministic => 'From this app, offline',
+    AiDelivery.generated => 'Answered online by the AI Assistant',
+    AiDelivery.generatedInEnglishFallback =>
+      'Answered online by the AI Assistant, in English',
+  };
 
   String _deliveryLabel(AiDelivery delivery) => switch (delivery) {
     AiDelivery.deterministic => 'From your saved information, on this phone',

@@ -36,14 +36,23 @@ enum AiErrorCode {
 
   /// A plain sentence for an elderly user. Never a status code.
   String get message => switch (this) {
-    AiErrorCode.notConfigured => 'Smart answers are not set up yet.',
-    AiErrorCode.offline => 'No internet connection.',
-    AiErrorCode.timeout => 'The smart answer took too long.',
-    AiErrorCode.rateLimited => 'Too many questions just now.',
-    AiErrorCode.upstream => 'The smart answer service is unavailable.',
-    AiErrorCode.invalidResponse => 'The smart answer could not be checked.',
-    AiErrorCode.unknown => 'Smart answers are unavailable.',
+    AiErrorCode.notConfigured => 'The AI Assistant is not set up on this app.',
+    AiErrorCode.offline =>
+      'The AI Assistant could not be reached. Please check the internet '
+          'connection and try again.',
+    AiErrorCode.timeout =>
+      'The AI Assistant took too long to answer. Please try again.',
+    AiErrorCode.rateLimited =>
+      'Too many questions just now. Please wait a minute and try again.',
+    AiErrorCode.upstream ||
+    AiErrorCode.invalidResponse ||
+    AiErrorCode.unknown =>
+      'The AI Assistant is temporarily unavailable. Please try again.',
   };
+
+  /// Whether asking again in a moment could help. False only when the
+  /// gateway itself is not set up, which no amount of retrying will change.
+  bool get isRetryable => this != AiErrorCode.notConfigured;
 }
 
 class AiException implements Exception {
