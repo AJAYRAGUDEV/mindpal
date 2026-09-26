@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 
 /// How often a reminder repeats.
@@ -17,6 +18,12 @@ enum ReminderRepeat {
 
   static ReminderRepeat fromName(String? name) => ReminderRepeat.values
       .firstWhere((value) => value.name == name, orElse: () => once);
+
+  /// The translated label; [label] stays as the English fallback.
+  String localisedLabel(AppStrings strings) => switch (this) {
+    ReminderRepeat.once => strings.repeatOnce,
+    ReminderRepeat.daily => strings.repeatDaily,
+  };
 }
 
 /// What kind of reminder this is. Purely a label chosen by the user or their
@@ -65,6 +72,17 @@ enum ReminderCategory {
 
   static ReminderCategory fromName(String? name) => ReminderCategory.values
       .firstWhere((value) => value.name == name, orElse: () => other);
+
+  /// The translated label. [label] stays as the English fallback so the enum
+  /// is still usable from code with no BuildContext (logs, notifications).
+  String localisedLabel(AppStrings strings) => switch (this) {
+    ReminderCategory.dailyActivity => strings.catDailyActivity,
+    ReminderCategory.meal => strings.catMeal,
+    ReminderCategory.appointment => strings.catAppointment,
+    ReminderCategory.medicine => strings.catMedicine,
+    ReminderCategory.personal => strings.catPersonal,
+    ReminderCategory.other => strings.catOther,
+  };
 }
 
 /// One reminder.

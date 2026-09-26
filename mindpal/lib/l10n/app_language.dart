@@ -88,7 +88,7 @@ const AppLanguage kEnglish = AppLanguage(
   englishName: 'English',
   endonym: 'English',
   ui: CapabilityStatus.verified,
-  textAi: CapabilityStatus.untested,
+  textAi: CapabilityStatus.experimental,
   speechToText: CapabilityStatus.untested,
   textToSpeech: CapabilityStatus.untested,
   speechLocaleTag: 'en-IN',
@@ -100,10 +100,19 @@ const AppLanguage kDefaultLanguage = kEnglish;
 /// Every language the app offers, covering the eight North-Eastern states.
 ///
 /// HONEST STATUS, as of today:
-///   * textAi is `untested` for every language. The generative path is now
-///     BUILT (see services/ai/), but nobody has run a real request through it
-///     yet, so no language may claim it works. Flip a row to `experimental`
-///     or `verified` only after actually testing that language end to end.
+///   * textAi was MEASURED on 27 September 2026, three samples per language
+///     against the live model, and each row below says what was observed:
+///       - en, bn, ne: correct language and script every time.
+///       - as: Assamese script every time, with Assamese-specific letters.
+///       - mni: Bengali-script Manipuri twice, English once.
+///       - lus, kha: plausible output, but both are Latin-script, so nothing
+///         in the code can tell Mizo or Khasi from English. Untested means
+///         exactly that: a person still has to read it.
+///       - brx: asked for Bodo, the model returned fluent HINDI. Marked not
+///         available rather than pretending.
+///       - grt, trp: the model declines and answers in English, and now says
+///         so honestly. Marked not available.
+///     No language is `verified` for AI: that needs a native speaker.
 ///   * speechToText and textToSpeech are `untested` everywhere, because no
 ///     speech code has been written and nothing has been run on a device.
 ///   * ui is `verified` only for English (the strings were written in it) and
@@ -118,7 +127,7 @@ const List<AppLanguage> kAppLanguages = [
     englishName: 'Assamese',
     endonym: 'অসমীয়া',
     ui: CapabilityStatus.draft,
-    textAi: CapabilityStatus.untested,
+    textAi: CapabilityStatus.experimental,
     speechToText: CapabilityStatus.untested,
     textToSpeech: CapabilityStatus.untested,
     speechLocaleTag: 'as-IN',
@@ -128,7 +137,7 @@ const List<AppLanguage> kAppLanguages = [
     englishName: 'Bengali',
     endonym: 'বাংলা',
     ui: CapabilityStatus.draft,
-    textAi: CapabilityStatus.untested,
+    textAi: CapabilityStatus.experimental,
     speechToText: CapabilityStatus.untested,
     textToSpeech: CapabilityStatus.untested,
     speechLocaleTag: 'bn-IN',
@@ -138,7 +147,7 @@ const List<AppLanguage> kAppLanguages = [
     englishName: 'Nepali',
     endonym: 'नेपाली',
     ui: CapabilityStatus.draft,
-    textAi: CapabilityStatus.untested,
+    textAi: CapabilityStatus.experimental,
     speechToText: CapabilityStatus.untested,
     textToSpeech: CapabilityStatus.untested,
     speechLocaleTag: 'ne-NP',
@@ -148,7 +157,7 @@ const List<AppLanguage> kAppLanguages = [
     englishName: 'Bodo',
     endonym: 'बड़ो',
     ui: CapabilityStatus.notAvailable,
-    textAi: CapabilityStatus.untested,
+    textAi: CapabilityStatus.notAvailable,
     speechToText: CapabilityStatus.untested,
     textToSpeech: CapabilityStatus.untested,
     scriptNote: 'Written in Devanagari.',
@@ -190,7 +199,7 @@ const List<AppLanguage> kAppLanguages = [
     englishName: 'Garo',
     endonym: 'Garo',
     ui: CapabilityStatus.notAvailable,
-    textAi: CapabilityStatus.untested,
+    textAi: CapabilityStatus.notAvailable,
     speechToText: CapabilityStatus.untested,
     textToSpeech: CapabilityStatus.untested,
     scriptNote: 'Fuller native name: A·chik. Latin script.',
@@ -200,7 +209,7 @@ const List<AppLanguage> kAppLanguages = [
     englishName: 'Kokborok (Tripuri)',
     endonym: 'Kokborok',
     ui: CapabilityStatus.notAvailable,
-    textAi: CapabilityStatus.untested,
+    textAi: CapabilityStatus.notAvailable,
     speechToText: CapabilityStatus.untested,
     textToSpeech: CapabilityStatus.untested,
     scriptNote: 'Written in both Latin and Bengali script.',

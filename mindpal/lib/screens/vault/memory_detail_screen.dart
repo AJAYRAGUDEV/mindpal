@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/language_scope.dart';
 import '../../models/vault_memory.dart';
 import '../../services/memory_vault_service.dart';
 import '../../theme/app_sizes.dart';
@@ -82,7 +83,7 @@ class MemoryDetailScreen extends StatelessWidget {
                 Icon(category.icon, size: 24, color: category.color),
                 const SizedBox(width: 6),
                 Text(
-                  category.label,
+                  category.localisedLabel(LanguageScope.of(context)),
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,

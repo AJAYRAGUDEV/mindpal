@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/language_scope.dart';
 import '../models/reminder.dart';
 import '../theme/app_sizes.dart';
 import '../theme/app_theme.dart';
@@ -80,7 +81,7 @@ class ReminderCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             // "10:00 AM  ·  Daily"
-                            '${reminder.formattedTime}  ·  ${reminder.repeat.label}',
+                            '${reminder.formattedTime}  ·  ${reminder.repeat.localisedLabel(LanguageScope.of(context))}',
                             style: const TextStyle(
                               fontSize: 19,
                               fontWeight: FontWeight.w600,

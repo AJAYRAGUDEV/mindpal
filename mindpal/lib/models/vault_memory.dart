@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../theme/app_theme.dart';
 import 'identifiable.dart';
 
@@ -25,6 +26,16 @@ enum MemoryCategory {
 
   static MemoryCategory fromName(String? name) => MemoryCategory.values
       .firstWhere((value) => value.name == name, orElse: () => MemoryCategory.other);
+
+  /// The translated label; [label] remains the English fallback.
+  String localisedLabel(AppStrings strings) => switch (this) {
+    MemoryCategory.family => strings.catFamily,
+    MemoryCategory.friends => strings.catFriends,
+    MemoryCategory.places => strings.catPlaces,
+    MemoryCategory.events => strings.catEvents,
+    MemoryCategory.childhood => strings.catChildhood,
+    MemoryCategory.other => strings.catOther,
+  };
 }
 
 /// One item in the Memory Vault: a moment worth keeping and revisiting.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/language_scope.dart';
 import '../../models/vault_memory.dart';
 import '../../services/memory_vault_service.dart';
 import '../../theme/app_sizes.dart';
@@ -115,7 +116,7 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Memory Vault')),
+      appBar: AppBar(title: Text(LanguageScope.of(context).memoryVault)),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -127,7 +128,7 @@ class _MemoryVaultScreenState extends State<MemoryVaultScreen> {
                   FilledButton.icon(
                     onPressed: _isSaving ? null : _add,
                     icon: const Icon(Icons.add_rounded, size: AppSizes.iconMedium),
-                    label: const Text('Add Memory'),
+                    label: Text(LanguageScope.of(context).addMemory),
                   ),
                   const SizedBox(height: AppSizes.gapLarge),
                   for (final memory in _memories) ...[
@@ -180,7 +181,7 @@ class _EmptyVault extends StatelessWidget {
         ),
         const SizedBox(height: AppSizes.gapLarge),
         Text(
-          'No memories added yet.',
+          LanguageScope.of(context).noMemoriesYet,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
@@ -195,7 +196,7 @@ class _EmptyVault extends StatelessWidget {
         FilledButton.icon(
           onPressed: busy ? null : onAdd,
           icon: const Icon(Icons.add_rounded, size: AppSizes.iconMedium),
-          label: const Text('Add Your First Memory'),
+          label: Text(LanguageScope.of(context).addFirstMemory),
         ),
         const SizedBox(height: AppSizes.gap),
         OutlinedButton.icon(
@@ -263,7 +264,9 @@ class _MemoryCard extends StatelessWidget {
                       children: [
                         _Tag(
                           icon: category.icon,
-                          label: category.label,
+                          label: category.localisedLabel(
+                            LanguageScope.of(context),
+                          ),
                           color: category.color,
                         ),
                         if (memory.hasVideo && memory.hasPhoto) ...[

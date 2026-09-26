@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/language_scope.dart';
 import '../../models/reminder.dart';
 import '../../theme/app_sizes.dart';
 import '../../theme/app_theme.dart';
@@ -41,6 +42,7 @@ class RemindersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = LanguageScope.of(context);
     final now = DateTime.now();
     final completed = reminders
         .where((reminder) => reminder.isCompletedOn(now))
@@ -50,7 +52,7 @@ class RemindersScreen extends StatelessWidget {
       padding: const EdgeInsets.all(AppSizes.pagePadding),
       children: [
         Text(
-          "Today's Reminders",
+          strings.todaysReminders,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 4),

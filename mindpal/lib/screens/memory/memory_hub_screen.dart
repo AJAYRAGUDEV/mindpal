@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/language_scope.dart';
 import '../../models/vault_memory.dart';
 import '../../services/memory_aid_service.dart';
 import '../../services/memory_vault_service.dart';
@@ -112,7 +113,7 @@ class _MemoryHubScreenState extends State<MemoryHubScreen> {
           OverviewCard(
             icon: Icons.people_alt_rounded,
             accentColor: AppColors.activity,
-            title: 'People',
+            title: LanguageScope.of(context).people,
             message: _countLabel(
               _data.people.length,
               'person',
@@ -126,7 +127,7 @@ class _MemoryHubScreenState extends State<MemoryHubScreen> {
           OverviewCard(
             icon: Icons.place_rounded,
             accentColor: AppColors.primary,
-            title: 'Places',
+            title: LanguageScope.of(context).places,
             message: _countLabel(
               _data.places.length,
               'place',
@@ -140,7 +141,7 @@ class _MemoryHubScreenState extends State<MemoryHubScreen> {
           OverviewCard(
             icon: Icons.sticky_note_2_rounded,
             accentColor: AppColors.memory,
-            title: 'Notes',
+            title: LanguageScope.of(context).notes,
             message: _countLabel(
               _data.notes.length,
               'note',
@@ -153,7 +154,7 @@ class _MemoryHubScreenState extends State<MemoryHubScreen> {
           OverviewCard(
             icon: Icons.photo_album_rounded,
             accentColor: AppColors.reminder,
-            title: 'Memory Vault',
+            title: LanguageScope.of(context).memoryVault,
             message: _countLabel(
               _memories.length,
               'memory',
