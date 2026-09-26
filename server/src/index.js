@@ -4,6 +4,7 @@ import express from 'express';
 import { RateLimiter, TtlCache } from './cache.js';
 import { config, isGeminiConfigured, redact } from './config.js';
 import { AiErrorCode, callGemini, GatewayError } from './gemini.js';
+import { resolveLanguageUsed } from './languages.js';
 import {
   buildGamePrompt,
   buildGeneralPrompt,
@@ -202,10 +203,9 @@ async function handleGeneralKnowledge(payload, log) {
     success: true,
     text: answer,
     model,
-    languageUsed:
-      typeof data.languageUsed === 'string' && data.languageUsed.trim()
-        ? data.languageUsed.trim()
-        : payload.language,
+    // Checked against the text, not taken on trust: a model asked for
+    // Manipuri answered in English and reported "mni". See languages.js.
+    languageUsed: resolveLanguageUsed(payload.language, data.languageUsed, answer),
   };
 }
 
@@ -231,12 +231,10 @@ async function handleMemoryAssistant(payload, log) {
     text: answer,
     model,
     hasEnoughInformation: data.hasEnoughInformation !== false,
-    // What the model says it actually wrote in. The app compares this with
-    // what it asked for, and tells the user when the two differ.
-    languageUsed:
-      typeof data.languageUsed === 'string' && data.languageUsed.trim()
-        ? data.languageUsed.trim()
-        : payload.language,
+    // What the model ACTUALLY wrote in, verified against the script where
+    // the script can settle it. The app compares this with what it asked
+    // for and tells the user when the two differ.
+    languageUsed: resolveLanguageUsed(payload.language, data.languageUsed, answer),
   };
 }
 

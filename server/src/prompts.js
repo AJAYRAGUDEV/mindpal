@@ -1,3 +1,5 @@
+import { describeLanguage, languageNote } from './languages.js';
+
 /**
  * System instructions and response schemas.
  *
@@ -105,7 +107,16 @@ export const GENERAL_SCHEMA = {
  * keeps those out, and the gateway rejects personal context on this task.
  */
 export function buildGeneralPrompt({ language, userInput, history }) {
-  const lines = [`Reply in this language: ${language}.`];
+  // The full name plus its script, never the bare code: "grt" was read as
+  // Greek. See languages.js.
+  const lines = [
+    `Reply in ${describeLanguage(language)}.${languageNote(language)}`,
+    'If you cannot write naturally and correctly in that language, reply in',
+    'English instead and set languageUsed to "en". Do not guess at a language',
+    'you do not know well, and do not write the language in Latin letters if',
+    'it has its own script.',
+    `Set languageUsed to the code "${language}" if you wrote in it, or "en".`,
+  ];
 
   if (Array.isArray(history) && history.length > 0) {
     lines.push(
@@ -159,9 +170,11 @@ export const GAME_SCHEMA = {
  */
 export function buildMemoryPrompt({ language, context, userInput }) {
   return [
-    `Reply in this language: ${language}.`,
+    `Reply in ${describeLanguage(language)}.${languageNote(language)}`,
     'If you cannot write naturally in that language, reply in English and set',
-    'languageUsed to "en".',
+    'languageUsed to "en". Do not write a language in Latin letters when it',
+    'has its own script.',
+    `Set languageUsed to the code "${language}" if you wrote in it, or "en".`,
     '',
     'Memory context (the only facts you may use):',
     JSON.stringify(context, null, 2),
@@ -173,7 +186,8 @@ export function buildMemoryPrompt({ language, context, userInput }) {
 export function buildGamePrompt({ language, context, count, optionCount }) {
   return [
     `Write up to ${count} questions with exactly ${optionCount} options each.`,
-    `Write the question text in this language: ${language}.`,
+    `Write the question text in ${describeLanguage(language)}.`
+      + languageNote(language),
     'Keep names, places and other stored values EXACTLY as they appear in the',
     'context — do not translate them.',
     '',

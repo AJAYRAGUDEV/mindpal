@@ -1,3 +1,5 @@
+import { isKnownLanguage } from './languages.js';
+
 /**
  * Validates incoming requests before any Gemini call is made.
  *
@@ -30,6 +32,12 @@ export function validateAiRequest(body) {
 
   if (typeof language !== 'string' || language.trim().length === 0) {
     return { ok: false, error: 'language is required.' };
+  }
+
+  // An unknown code is a bug, and forwarding it wastes a Gemini call on a
+  // guess: "grt" once came back as Greek.
+  if (!isKnownLanguage(language.trim())) {
+    return { ok: false, error: `language "${language.trim()}" is not supported.` };
   }
 
   if (!Array.isArray(context)) {
