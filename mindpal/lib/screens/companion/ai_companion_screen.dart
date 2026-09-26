@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../l10n/language_scope.dart';
@@ -12,7 +14,11 @@ import '../../services/companion/memory_education.dart';
 import '../../services/conversation_context.dart';
 import '../../services/memory_aid_service.dart';
 import '../../services/memory_assistant_service.dart';
+import '../../l10n/app_language.dart';
+import '../../services/voice/voice_controller.dart';
 import '../../services/voice_service.dart';
+import '../../widgets/speech_controls.dart';
+import '../../widgets/voice_input_bar.dart';
 import '../../theme/app_sizes.dart';
 import '../../theme/app_theme.dart';
 
@@ -36,6 +42,7 @@ class AiCompanionScreen extends StatefulWidget {
     required this.onOpenGames,
     required this.onOpenReminders,
     required this.onOpenMemoryAid,
+    this.voice,
     this.speech = const UnavailableSpeechToText(),
     this.suggestions = const AiSuggestionService(),
     this.classifier = const CompanionIntentClassifier(),
@@ -63,6 +70,12 @@ class AiCompanionScreen extends StatefulWidget {
 
   /// The curated, offline educational answers.
   final MemoryEducation education;
+
+  /// The shared microphone and voice. Null means this build has no audio —
+  /// tests, and any device where the engines did not start. Every voice
+  /// control checks for null rather than assuming, so the screen is fully
+  /// usable by typing whatever happens.
+  final VoiceController? voice;
 
   @override
   State<AiCompanionScreen> createState() => _AiCompanionScreenState();
@@ -92,10 +105,23 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
   void initState() {
     super.initState();
     _load();
+    // The controller is a ChangeNotifier: listening to it is what makes the
+    // microphone panel and the Play/Pause buttons follow the real state
+    // rather than a copy that can drift out of date.
+    widget.voice?.addListener(_onVoiceChanged);
+  }
+
+  void _onVoiceChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    // Leaving the screen must silence the app: a voice that keeps reading an
+    // answer the user has navigated away from is alarming, not helpful.
+    widget.voice?.removeListener(_onVoiceChanged);
+    widget.voice?.stopSpeaking();
+    widget.voice?.cancelListening();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -356,6 +382,16 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
       _isThinking = false;
     });
     _scrollToEnd();
+
+    // Read it out, unless the user has switched that off. The safety branch
+    // is spoken too: a boundary answer about health is exactly the one a
+    // user should not have to squint at.
+    final voice = widget.voice;
+    if (voice != null && text.trim().isNotEmpty) {
+      unawaited(
+        voice.speakIfEnabled(text, LanguageScope.of(context).language),
+      );
+    }
   }
 
   String _generalDeliveryLabel(AiDelivery delivery) => switch (delivery) {
@@ -468,6 +504,8 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
                           message: _messages[index],
                           onFollowUp: _handleFollowUp,
                           onRetry: () => _send(_lastQuestion),
+                          voice: widget.voice,
+                          language: LanguageScope.of(context).language,
                         );
                       },
                     ),
@@ -480,8 +518,11 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
                   _Composer(
                     controller: _inputController,
                     speech: widget.speech,
+                    voice: widget.voice,
+                    language: LanguageScope.of(context).language,
                     isThinking: _isThinking,
                     onSend: () => _send(_inputController.text),
+                    onSpokenText: _send,
                   ),
                 ],
               ),
@@ -525,7 +566,13 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.onFollowUp,
     required this.onRetry,
+    this.voice,
+    this.language,
   });
+
+  /// Null on a build with no audio; the controls simply do not appear.
+  final VoiceController? voice;
+  final AppLanguage? language;
 
   final ChatMessage message;
   final ValueChanged<ChatFollowUp> onFollowUp;
@@ -587,6 +634,16 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ],
+
+          // Read-aloud controls, on companion answers only: there is no
+          // sense offering to read back what the user just typed.
+          if (!isUser && voice != null && language != null &&
+              message.text.trim().isNotEmpty)
+            SpeechControls(
+              voice: voice!,
+              text: message.text,
+              language: language!,
+            ),
 
           if (message.isError) ...[
             const SizedBox(height: AppSizes.gapSmall),
@@ -859,9 +916,19 @@ class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
     required this.speech,
+    required this.voice,
+    required this.language,
     required this.isThinking,
     required this.onSend,
+    required this.onSpokenText,
   });
+
+  /// The shared microphone, or null on a build with no audio.
+  final VoiceController? voice;
+  final AppLanguage language;
+
+  /// Called with text the user has spoken AND confirmed.
+  final ValueChanged<String> onSpokenText;
 
   final TextEditingController controller;
   final SpeechToTextService speech;
@@ -878,30 +945,17 @@ class _Composer extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // The microphone is shown but disabled, with the reason stated.
-          // Hiding it would misrepresent the design; enabling a button that
-          // does nothing would be worse.
-          if (!speech.isAvailable)
+          // The microphone, the listening indicator, and the correction
+          // step, or an honest note when this device cannot listen. Nothing
+          // recognised is ever sent without the user seeing it first.
+          if (voice != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSizes.gapSmall),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.mic_off_rounded,
-                    size: 22,
-                    color: AppColors.textSecondary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      speech.unavailableReason,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
+              child: VoiceInputBar(
+                voice: voice!,
+                language: language,
+                enabled: !isThinking,
+                onTextReady: onSpokenText,
               ),
             ),
           Row(

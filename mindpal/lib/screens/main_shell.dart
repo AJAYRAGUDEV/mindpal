@@ -12,6 +12,7 @@ import '../services/game_history_service.dart';
 import '../services/memory_aid_service.dart';
 import '../services/memory_vault_service.dart';
 import '../services/notification_service.dart';
+import '../services/voice/voice_controller.dart';
 import '../services/profile_service.dart';
 import '../services/reminder_service.dart';
 import '../theme/app_sizes.dart';
@@ -66,6 +67,7 @@ class MainShell extends StatefulWidget {
     required this.notificationService,
     required this.memoryAidService,
     required this.memoryVaultService,
+    this.voice,
     required this.gameHistoryService,
     required this.aiService,
     this.storageHealthy = true,
@@ -76,6 +78,7 @@ class MainShell extends StatefulWidget {
   final NotificationService notificationService;
   final MemoryAidService memoryAidService;
   final MemoryVaultService memoryVaultService;
+  final VoiceController? voice;
   final GameHistoryService gameHistoryService;
   final AiService aiService;
 
@@ -402,6 +405,7 @@ class _MainShellState extends State<MainShell> {
           onOpenGames: () => _openTab(AppTab.mindPal),
           onOpenReminders: () => _openTab(AppTab.reminders),
           onOpenMemoryAid: () => _openTab(AppTab.memory),
+          voice: widget.voice,
         ),
       ),
     );

@@ -24,6 +24,18 @@
          app falls back to inexact alarms rather than none.
 
          NOT declared: camera, microphone, storage, location, contacts. -->
+    <!-- Voice input. RECORD_AUDIO is the only permission the microphone
+         needs; the app explains what it is for in its own words before the
+         system dialog appears, because "allow microphone" is not a reason.
+         Audio is never written to disk: the recogniser returns text and the
+         audio is discarded.
+
+         The <queries> block below is required on Android 11+ for
+         speech_to_text to see that a recognition service exists at all.
+         Without it the plugin reports "not available" on a phone that can
+         in fact listen. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission
@@ -90,6 +102,13 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Lets speech_to_text and flutter_tts find the device's engines. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
         </intent>
     </queries>
 </manifest>

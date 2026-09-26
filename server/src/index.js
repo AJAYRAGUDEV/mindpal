@@ -11,6 +11,9 @@ import {
   buildMemoryPrompt,
   GAME_SCHEMA,
   GAME_SYSTEM,
+  buildReminderPrompt,
+  REMINDER_SCHEMA,
+  REMINDER_SYSTEM,
   GENERAL_SCHEMA,
   GENERAL_SYSTEM,
   MEMORY_ASSISTANT_SCHEMA,
@@ -168,6 +171,8 @@ function runTask(payload, log) {
       return handleMemoryAssistant(payload, log);
     case 'general_knowledge':
       return handleGeneralKnowledge(payload, log);
+    case 'parse_reminder':
+      return handleReminderParse(payload, log);
     default:
       return handleGameQuestions(payload, log);
   }
@@ -206,6 +211,61 @@ async function handleGeneralKnowledge(payload, log) {
     // Checked against the text, not taken on trust: a model asked for
     // Manipuri answered in English and reported "mni". See languages.js.
     languageUsed: resolveLanguageUsed(payload.language, data.languageUsed, answer),
+  };
+}
+
+/**
+ * Turns one spoken sentence into reminder fields.
+ *
+ * Everything is re-checked here rather than trusted: an hour outside 0-23, a
+ * category we do not have, or a repeat we do not support would all become a
+ * broken reminder on the phone. Anything that fails a check is dropped and
+ * reported as missing, so the confirmation screen asks the user instead of
+ * saving a guess.
+ */
+async function handleReminderParse(payload, log) {
+  const { data, model } = await callGemini({
+    systemInstruction: REMINDER_SYSTEM,
+    prompt: buildReminderPrompt(payload),
+    schema: REMINDER_SCHEMA,
+    maxOutputTokens: 512,
+    log,
+  });
+
+  const missing = new Set(
+    Array.isArray(data.missing)
+      ? data.missing.filter((item) => typeof item === 'string')
+      : [],
+  );
+
+  const title = typeof data.title === 'string' ? data.title.trim() : '';
+  if (title.length === 0) missing.add('title');
+
+  const hour = Number.isInteger(data.hour) ? data.hour : null;
+  const minute = Number.isInteger(data.minute) ? data.minute : 0;
+  const timeIsValid =
+    hour !== null && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+  if (!timeIsValid) missing.add('time');
+
+  const CATEGORIES = [
+    'dailyActivity', 'meal', 'appointment', 'medicine', 'personal', 'other',
+  ];
+  const category = CATEGORIES.includes(data.category) ? data.category : 'other';
+  const repeat = data.repeat === 'daily' ? 'daily' : 'once';
+
+  return {
+    success: true,
+    model,
+    understood: data.understood !== false && missing.size < 2,
+    title,
+    // Null rather than a default: the app must not be able to mistake a
+    // missing time for midnight.
+    hour: timeIsValid ? hour : null,
+    minute: timeIsValid ? minute : null,
+    repeat,
+    category,
+    notes: typeof data.notes === 'string' ? data.notes.trim() : '',
+    missing: [...missing],
   };
 }
 

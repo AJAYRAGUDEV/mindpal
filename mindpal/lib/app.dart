@@ -11,6 +11,7 @@ import 'services/memory_aid_service.dart';
 import 'services/memory_vault_service.dart';
 import 'models/reminder.dart';
 import 'services/notification_service.dart';
+import 'services/voice/voice_controller.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'theme/app_theme.dart';
@@ -32,6 +33,7 @@ class MindPalApp extends StatefulWidget {
     required this.gameHistoryService,
     required this.aiService,
     required this.languageService,
+    this.voice,
     this.initialLanguage = kDefaultLanguage,
     this.storageHealthy = true,
   });
@@ -49,6 +51,9 @@ class MindPalApp extends StatefulWidget {
   final GameHistoryService gameHistoryService;
   final AiService aiService;
   final LanguageService languageService;
+
+  /// The shared microphone and voice. Null in tests, which never touch audio.
+  final VoiceController? voice;
 
   /// Loaded from storage in main() before the app starts, so the very first
   /// frame is already in the user's language — no flash of English.
@@ -101,6 +106,7 @@ class _MindPalAppState extends State<MindPalApp> {
           notificationService: widget.notificationService,
           memoryAidService: widget.memoryAidService,
           memoryVaultService: widget.memoryVaultService,
+          voice: widget.voice,
           gameHistoryService: widget.gameHistoryService,
           aiService: widget.aiService,
           storageHealthy: widget.storageHealthy,

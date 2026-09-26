@@ -195,3 +195,63 @@ export function buildGamePrompt({ language, context, count, optionCount }) {
     JSON.stringify(context, null, 2),
   ].join('\n');
 }
+
+/** Response shape for a spoken reminder. */
+export const REMINDER_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    understood: { type: 'BOOLEAN' },
+    title: { type: 'STRING' },
+    hour: { type: 'INTEGER' },
+    minute: { type: 'INTEGER' },
+    repeat: { type: 'STRING' },
+    category: { type: 'STRING' },
+    notes: { type: 'STRING' },
+    missing: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['understood'],
+};
+
+export const REMINDER_SYSTEM = `
+You turn one spoken sentence into the parts of a reminder. You do not chat,
+and you do not give advice of any kind, medical or otherwise.
+
+THE ONE RULE THAT MATTERS: never invent a time, a date or a task. If the
+person did not say when, leave hour and minute out and add "time" to missing.
+If they did not say what, leave title out and add "title" to missing. A
+reminder invented from a guess could mean a missed dose, so a missing piece
+must come back as missing and let the app ask.
+
+hour is 0-23. "8 PM" is 20. "Half past seven in the morning" is 7 and 30.
+A bare "8 o'clock" with no morning or evening is ambiguous: do NOT guess,
+add "time" to missing.
+
+repeat is "once" or "daily". "Every day", "each morning" and "daily" are
+daily. Anything else, and anything unclear, is "once".
+
+category is exactly one of: dailyActivity, meal, appointment, medicine,
+personal, other. Medicine, tablets, pills and doses are medicine. Breakfast,
+lunch, dinner and eating are meal. Doctor, hospital and clinic visits are
+appointment. If unsure, use other.
+
+title is what to do, in the person's own words, short and without the time:
+"Take your evening medicine", not "Remind me to take my evening medicine at
+8 PM". Keep the person's language.
+
+understood is false only when the sentence is not a reminder request at all.
+`;
+
+/**
+ * The spoken-reminder prompt.
+ *
+ * Carries no personal context: a reminder is built from the sentence alone,
+ * so there is nothing of the user's to leak here.
+ */
+export function buildReminderPrompt({ language, userInput }) {
+  return [
+    `The person is speaking ${describeLanguage(language)}.`,
+    'Write the title in that same language, in their own words.',
+    '',
+    `They said: "${userInput}"`,
+  ].join(String.fromCharCode(10));
+}

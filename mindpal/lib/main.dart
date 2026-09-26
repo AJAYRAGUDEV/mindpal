@@ -13,6 +13,7 @@ import 'services/memory_aid_service.dart';
 import 'services/memory_vault_service.dart';
 import 'services/notification_service.dart';
 import 'services/notifications/notification_service_factory.dart';
+import 'services/voice/voice_controller.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'storage/local_storage.dart';
@@ -102,6 +103,21 @@ Future<void> main() async {
     debugPrint('BACKEND: $gatewayUrl  (from ${ApiConfig.describeSource})');
   }
 
+  // One microphone and one voice for the whole app: two recognisers would
+  // fight for the audio device, and the symptom is silence, not an error.
+  //
+  // init() only looks at what the device offers. It does NOT ask for the
+  // microphone — that happens on the first tap of the Speak button, with an
+  // explanation, because a permission prompt at launch gets a reflexive no.
+  final voice = VoiceController();
+  await voice.init();
+  debugPrint(
+    'VOICE: mic ${voice.micAvailable ? "ready" : "unavailable"}, '
+    'speaker ${voice.speakerAvailable ? "ready" : "unavailable"}, '
+    'can hear ${voice.recognisableLanguages().length} of our languages, '
+    'can speak ${voice.speakableLanguages().length}',
+  );
+
   // Read the saved language BEFORE the first frame, so the app opens straight
   // into the user's language rather than flashing English for a moment.
   final languageService = LanguageService(storage);
@@ -120,6 +136,7 @@ Future<void> main() async {
       gameHistoryService: GameHistoryService(storage),
       aiService: aiService,
       languageService: languageService,
+      voice: voice,
       initialLanguage: language,
       storageHealthy: storageHealthy,
     ),

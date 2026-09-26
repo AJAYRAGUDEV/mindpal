@@ -7,7 +7,12 @@ import { isKnownLanguage } from './languages.js';
  * call from a limited free tier, and it should never reach the model at all.
  */
 
-export const TASKS = ['memory_assistant', 'game_questions', 'general_knowledge'];
+export const TASKS = [
+  'memory_assistant',
+  'game_questions',
+  'general_knowledge',
+  'parse_reminder',
+];
 
 /** How much context one request may carry. */
 const MAX_CONTEXT_RECORDS = 8;
@@ -61,6 +66,20 @@ export function validateAiRequest(body) {
         ok: false,
         error: 'general_knowledge must not carry personal context.',
       };
+    }
+    if (typeof userInput !== 'string' || userInput.trim().length === 0) {
+      return { ok: false, error: 'userInput is required.' };
+    }
+    if (userInput.length > MAX_USER_INPUT_LENGTH) {
+      return { ok: false, error: 'userInput is too long.' };
+    }
+  }
+
+  // A spoken reminder is one sentence and carries no personal context, for
+  // the same reason general_knowledge does not: there is nothing to leak.
+  if (task === 'parse_reminder') {
+    if (context.length > 0) {
+      return { ok: false, error: 'parse_reminder must not carry personal context.' };
     }
     if (typeof userInput !== 'string' || userInput.trim().length === 0) {
       return { ok: false, error: 'userInput is required.' };

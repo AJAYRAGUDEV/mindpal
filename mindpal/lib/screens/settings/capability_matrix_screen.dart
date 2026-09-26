@@ -275,6 +275,10 @@ class _DeviceFeatures extends StatelessWidget {
             label: 'Memory Vault photos and videos',
             status: CapabilityStatus.experimental,
           ),
+          const _CapabilityLine(
+            label: 'Voice input and spoken answers',
+            status: CapabilityStatus.untested,
+          ),
           const SizedBox(height: AppSizes.gapSmall),
           const Text(
             "Android reminders use the phone's own alarm system, with sound "
@@ -282,6 +286,15 @@ class _DeviceFeatures extends StatelessWidget {
             'unit-tested; delivery on a real phone has not yet been observed. '
             'A browser cannot ring with the page closed, so the web version '
             'keeps the reminder list without alarms.',
+            style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSizes.gapSmall),
+          const Text(
+            'Voice uses the microphone and voices your own device provides, '
+            'not any bundled by this app, so which languages work depends on '
+            'that device. Nothing spoken is recorded or saved. Voice has been '
+            'built and compiles, but no speech has ever been heard or spoken '
+            'on a real phone, so it stays marked untested.',
             style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
           ),
         ],
