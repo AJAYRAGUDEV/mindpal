@@ -195,9 +195,39 @@ class CompanionIntentClassifier {
     'an activity',
   ];
 
+  /// Phrases that make a question about the user's own life rather than the
+  /// world. "my daughter", "where did I go", "show me my wedding".
+  ///
+  /// This is the one signal that must never be overridden, because it is
+  /// what stops the app answering "Who is my daughter?" from general
+  /// knowledge and inventing a family member.
+  /// NOTE: bare "me" is deliberately absent. It is the indirect object in
+  /// "tell me a story", "show me the weather", "sing me a song" — ordinary
+  /// polite address to the assistant, not a reference to the user's own
+  /// life. Including it blocked exactly the questions this fix exists to
+  /// unblock. "my" carries the possessive meaning in every real case:
+  /// "show me MY wedding photo" still matches.
+  static const List<String> _possessive = [
+    ' my ',
+    ' mine ',
+    ' i ',
+    ' im ',
+    ' ive ',
+    ' we ',
+    ' our ',
+  ];
+
+  /// True when the user is asking about their own life.
+  bool isAboutOwnLife(String question) => _isPersonal(_normalise(question));
+
+  bool _isPersonal(String text) {
+    final padded = ' $text ';
+    return _possessive.any(padded.contains);
+  }
+
   CompanionIntent classify(String question) {
     final text = _normalise(question);
-    if (text.isEmpty) return CompanionIntent.personalMemory;
+    if (text.isEmpty) return CompanionIntent.generalKnowledge;
 
     // 1. SAFETY FIRST. Anything where the user is asking about their own
     //    health is answered from a fixed template and never sent to a model.
@@ -226,24 +256,63 @@ class CompanionIntentClassifier {
       return CompanionIntent.casualConversation;
     }
 
-    // 6. A question shaped like a request for general facts.
+    // 6. THE PERSONAL GATE. "my", "I", "me" mean the user is asking about
+    //    their own life, and that must win over every general-knowledge
+    //    pattern below: "What is my daughter's name?" matches "what is the"
+    //    shape but is unmistakably personal.
+    if (_isPersonal(text)) return CompanionIntent.personalMemory;
+
+    // 7. A question shaped like a request for general facts.
     if (_containsAny(text, _generalOpenings)) {
       return _looksLikeAPlace(text)
           ? CompanionIntent.placeInformation
           : CompanionIntent.generalKnowledge;
     }
 
-    // 7. "Tell me about X" is ambiguous: X may be a saved person OR a city.
-    //    Personal wins, because the vault is checked first and costs nothing.
-    //    When the vault has no match the caller re-routes to general
-    //    knowledge, so nothing is lost by trying the cheap option first.
-    if (_containsAny(text, _placeOpenings)) {
+    // 8. "Tell me about X" / "Who is X" is ambiguous: X may be a saved
+    //    person OR a city OR a historical figure. The vault is checked first
+    //    because it is free and instant, and a miss now falls through to
+    //    general knowledge, so nothing is lost by trying it.
+    if (_containsAny(text, _placeOpenings) || _looksLikeEntityQuestion(text)) {
       return CompanionIntent.personalMemory;
     }
 
-    // 8. Default: the user's own vault. A miss there is answered honestly,
-    //    which makes this a safe default for anything unrecognised.
-    return CompanionIntent.personalMemory;
+    // 9. DEFAULT: general knowledge.
+    //
+    //    This used to default to the vault, and that was the bug behind
+    //    "I don't have that information yet". Anything whose wording was not
+    //    in one of the lists above — "Why is exercise important?", "What day
+    //    comes after Monday?", "Tell me a short story" — was treated as a
+    //    question about the user's own saved records, missed, and was
+    //    answered as though the app had never heard of it.
+    //
+    //    An ordinary question is far more common than a vault question, and
+    //    a wrong guess here is cheap: general knowledge answers it, and the
+    //    prompt forbids claiming to know anything personal. A vault question
+    //    still gets there via the possessive check in step 6 and the entity
+    //    check in step 7.
+    return CompanionIntent.generalKnowledge;
+  }
+
+  /// "Who is Ravi?", "Tell me about Meena" — a short question naming
+  /// something that could plausibly be a saved person or place.
+  ///
+  /// Deliberately narrow. A long question, or one with a general verb
+  /// ("who invented", "who wrote"), is about the world.
+  bool _looksLikeEntityQuestion(String text) {
+    if (_containsAny(text, const [
+      'who invented',
+      'who wrote',
+      'who discovered',
+      'who painted',
+      'who built',
+      'who was the',
+      'who is the',
+    ])) {
+      return false;
+    }
+    final words = text.split(' ');
+    return text.startsWith('who is') && words.length <= 5;
   }
 
   /// True when the phrasing points at a place rather than a general fact.

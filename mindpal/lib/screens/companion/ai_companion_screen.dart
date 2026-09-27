@@ -251,18 +251,22 @@ class _AiCompanionScreenState extends State<AiCompanionScreen> {
     );
   }
 
-  /// Whether an unmatched personal question may be re-asked as a general one.
+  /// Whether a vault miss may be re-asked as a general question.
   ///
-  /// "Who is Rahul?" must NOT: naming a person the user did not save and
-  /// describing some other Rahul would be worse than saying we do not know.
-  /// "Tell me about Shillong" may: the user was asking about the world.
-  bool _mayFallThroughToGeneral(String question, AssistantAnswer answer) {
-    if (answer.intent == AssistantIntent.who) return false;
-    final text = question.toLowerCase();
-    return text.contains('tell me about') ||
-        text.contains('what is') ||
-        text.contains('where is');
-  }
+  /// INVERTED, and this is the second half of the "I don't have that
+  /// information yet" fix. The old rule allowed only three literal phrasings
+  /// — "tell me about", "what is", "where is" — so "Why is exercise
+  /// important?" and "What day comes after Monday?" died at the vault.
+  ///
+  /// Now a miss falls through by default, and the ONE thing that blocks it
+  /// is the user asking about their own life. "Who is my daughter?" must
+  /// stay "I don't have that saved": answering it from general knowledge
+  /// would invent a family member, which is the worst thing this app could
+  /// do. "Who is Ravi?" is allowed through, because the general prompt
+  /// forbids claiming to know anyone in the user's life, so the worst case
+  /// is an honest "I don't know who Ravi is to you".
+  bool _mayFallThroughToGeneral(String question, AssistantAnswer answer) =>
+      !widget.classifier.isAboutOwnLife(question);
 
   /// Places, facts and light conversation. Carries NO personal data.
   ///
