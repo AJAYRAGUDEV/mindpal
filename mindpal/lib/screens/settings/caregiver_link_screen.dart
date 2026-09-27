@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/care/care_client.dart';
 import '../../services/care/care_sync_service.dart';
 import '../../theme/app_sizes.dart';
 import '../../theme/app_theme.dart';
@@ -34,6 +35,85 @@ class _CaregiverLinkScreenState extends State<CaregiverLinkScreen> {
   DateTime? _expiresAt;
   bool _busy = false;
 
+  List<CareLink> _links = const [];
+  bool _loadingLinks = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLinks();
+  }
+
+  /// Who is currently linked. Read from the server every time, because a
+  /// caregiver may have redeemed a code since this screen was last opened.
+  Future<void> _loadLinks() async {
+    if (!widget.sync.isPaired) return;
+    setState(() => _loadingLinks = true);
+    try {
+      final links = await widget.sync.listLinks();
+      if (mounted) setState(() => _links = links);
+    } catch (error) {
+      if (mounted) _say('$error');
+    } finally {
+      if (mounted) setState(() => _loadingLinks = false);
+    }
+  }
+
+  /// Turns one permission on or off for one helper.
+  ///
+  /// Sent immediately rather than collected behind a Save button. This is a
+  /// consent decision, and an elderly user should not have to discover that
+  /// a switch they flipped did not count until they pressed something else.
+  Future<void> _setPermission(CareLink link, String key, bool value) async {
+    setState(() {
+      _links = [
+        for (final item in _links)
+          if (item.caregiverId == link.caregiverId)
+            CareLink(
+              caregiverId: item.caregiverId,
+              caregiverName: item.caregiverName,
+              email: item.email,
+              relationship: item.relationship,
+              permissions: {...item.permissions, key: value},
+            )
+          else
+            item,
+      ];
+    });
+
+    try {
+      await widget.sync.setPermissions(
+        caregiverId: link.caregiverId,
+        permissions: {key: value},
+      );
+    } catch (error) {
+      // Put it back. A switch must never show something the server refused.
+      if (mounted) {
+        _say('That did not save.');
+        await _loadLinks();
+      }
+    }
+  }
+
+  Future<void> _removeCaregiver(CareLink link) async {
+    final confirmed = await confirmDestructiveAction(
+      context,
+      title: 'Remove ${link.caregiverName}?',
+      message: '${link.caregiverName} will no longer see anything or set '
+          'reminders for you.',
+      confirmLabel: 'Remove',
+    );
+    if (!confirmed || !mounted) return;
+
+    try {
+      await widget.sync.revokeCaregiver(link.caregiverId);
+      await _loadLinks();
+      if (mounted) _say('${link.caregiverName} was removed.');
+    } catch (error) {
+      if (mounted) _say('$error');
+    }
+  }
+
   Future<void> _getCode() async {
     setState(() => _busy = true);
     try {
@@ -43,6 +123,7 @@ class _CaregiverLinkScreenState extends State<CaregiverLinkScreen> {
         _code = result.code;
         _expiresAt = result.expiresAt;
       });
+      await _loadLinks();
     } catch (error) {
       if (mounted) _say('$error');
     } finally {
@@ -129,6 +210,45 @@ class _CaregiverLinkScreenState extends State<CaregiverLinkScreen> {
               ),
 
               if (paired) ...[
+                const SizedBox(height: AppSizes.gapLarge),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Your helpers',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _loadingLinks ? null : _loadLinks,
+                      tooltip: 'Check again',
+                      icon: const Icon(Icons.refresh_rounded, size: 28),
+                    ),
+                  ],
+                ),
+                if (_loadingLinks && _links.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: AppSizes.gap),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_links.isEmpty)
+                  const Text(
+                    'Nobody yet. Give someone the code above, then tap the '
+                    'refresh button.',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: AppColors.textSecondary,
+                    ),
+                  )
+                else
+                  for (final link in _links)
+                    _HelperCard(
+                      link: link,
+                      onChanged: (key, value) =>
+                          _setPermission(link, key, value),
+                      onRemove: () => _removeCaregiver(link),
+                    ),
+
                 const SizedBox(height: AppSizes.gapLarge),
                 Text(
                   'Reminders from your helpers',
@@ -234,6 +354,102 @@ class _Note extends StatelessWidget {
           const SizedBox(width: AppSizes.gapSmall),
           Expanded(
             child: Text(text, style: const TextStyle(fontSize: 17)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One helper, with a switch per permission.
+///
+/// Every switch starts OFF for a new helper, which is the reason this screen
+/// has to exist: linking grants nothing, and the person being helped decides
+/// what each helper may see. The labels say what the HELPER can do, not what
+/// a database column is called.
+class _HelperCard extends StatelessWidget {
+  const _HelperCard({
+    required this.link,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final CareLink link;
+  final void Function(String key, bool value) onChanged;
+  final VoidCallback onRemove;
+
+  static const List<(String, String)> _permissions = [
+    ('can_view_reminders', 'See my reminders'),
+    ('can_edit_reminders', 'Set reminders for me'),
+    ('can_view_vault', 'See my memories'),
+    ('can_edit_vault', 'Add memories for me'),
+    ('can_view_activity', 'See the games I play'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: AppSizes.gap),
+      padding: const EdgeInsets.all(AppSizes.cardPadding),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppSizes.radius),
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.person_rounded,
+                size: 30,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: AppSizes.gapSmall),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      link.caregiverName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (link.relationship.trim().isNotEmpty)
+                      Text(
+                        link.relationship,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSizes.gapSmall),
+          const Text(
+            'What may they do?',
+            style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+          ),
+          for (final (key, label) in _permissions)
+            SwitchListTile.adaptive(
+              value: link.has(key),
+              onChanged: (value) => onChanged(key, value),
+              contentPadding: EdgeInsets.zero,
+              title: Text(label, style: const TextStyle(fontSize: 18)),
+            ),
+          const SizedBox(height: AppSizes.gapSmall),
+          OutlinedButton.icon(
+            onPressed: onRemove,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error, width: 1.5),
+              minimumSize: const Size(0, 52),
+            ),
+            icon: const Icon(Icons.person_remove_rounded, size: 24),
+            label: Text('Remove ${link.caregiverName}'),
           ),
         ],
       ),

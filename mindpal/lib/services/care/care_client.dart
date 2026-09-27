@@ -50,6 +50,46 @@ class RemoteReminder {
   );
 }
 
+/// One caregiver who is linked to this patient, and what they may do.
+class CareLink {
+  const CareLink({
+    required this.caregiverId,
+    required this.caregiverName,
+    required this.email,
+    required this.relationship,
+    required this.permissions,
+  });
+
+  final int caregiverId;
+  final String caregiverName;
+  final String email;
+  final String relationship;
+
+  /// Keyed by the server's column names, so what the screen shows and what
+  /// it sends back cannot drift apart.
+  final Map<String, bool> permissions;
+
+  bool has(String key) => permissions[key] ?? false;
+
+  factory CareLink.fromMap(Map<String, dynamic> map) {
+    final raw = map['permissions'];
+    final perms = raw is Map<String, dynamic> ? raw : const {};
+    return CareLink(
+      caregiverId: (map['caregiverId'] as num?)?.toInt() ?? 0,
+      caregiverName: map['caregiverName'] as String? ?? 'Someone',
+      email: map['email'] as String? ?? '',
+      relationship: map['relationship'] as String? ?? '',
+      permissions: {
+        'can_view_reminders': perms['viewReminders'] == true,
+        'can_edit_reminders': perms['editReminders'] == true,
+        'can_view_vault': perms['viewVault'] == true,
+        'can_edit_vault': perms['editVault'] == true,
+        'can_view_activity': perms['viewActivity'] == true,
+      },
+    );
+  }
+}
+
 /// What one sync returned.
 class SyncResult {
   const SyncResult({required this.reminders, required this.highestRev});
@@ -122,6 +162,43 @@ class CareClient {
     return (code: code, expiresAt: expires);
   }
 
+  /// Who is linked to this patient right now.
+  Future<List<CareLink>> listLinks(String deviceKey) async {
+    final body = await _send('GET', '/api/care/device/links', deviceKey: deviceKey);
+    final raw = body['links'];
+    return [
+      if (raw is List)
+        for (final item in raw)
+          if (item is Map<String, dynamic>) CareLink.fromMap(item),
+    ];
+  }
+
+  /// The patient grants or withdraws one caregiver's permissions.
+  ///
+  /// Authenticated by the device key, so the server can only ever apply it
+  /// to this device's own patient — the caregiver id is checked against
+  /// that, never trusted.
+  Future<void> setPermissions({
+    required String deviceKey,
+    required int caregiverId,
+    required Map<String, bool> permissions,
+  }) => _send(
+    'PUT',
+    '/api/care/device/links/$caregiverId/permissions',
+    body: permissions,
+    deviceKey: deviceKey,
+  );
+
+  /// The patient ends one caregiver's link entirely.
+  Future<void> revokeLink({
+    required String deviceKey,
+    required int caregiverId,
+  }) => _send(
+    'DELETE',
+    '/api/care/device/links/$caregiverId',
+    deviceKey: deviceKey,
+  );
+
   /// Everything that changed above [sinceRev].
   Future<SyncResult> sync({
     required String deviceKey,
@@ -165,9 +242,13 @@ class CareClient {
 
     http.Response response;
     try {
-      final request = method == 'GET'
-          ? _http.get(uri, headers: headers)
-          : _http.post(uri, headers: headers, body: jsonEncode(body ?? {}));
+      final encoded = body == null ? null : jsonEncode(body);
+      final request = switch (method) {
+        'GET' => _http.get(uri, headers: headers),
+        'PUT' => _http.put(uri, headers: headers, body: encoded),
+        'DELETE' => _http.delete(uri, headers: headers),
+        _ => _http.post(uri, headers: headers, body: encoded ?? '{}'),
+      };
       response = await request.timeout(_timeout);
     } on TimeoutException {
       throw const CareException('The server took too long to answer.');
@@ -180,7 +261,9 @@ class CareClient {
 
     Map<String, dynamic> decoded;
     try {
-      decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      decoded = response.body.trim().isEmpty
+          ? const {}
+          : jsonDecode(response.body) as Map<String, dynamic>;
     } catch (_) {
       throw const CareException('The server sent something unreadable.');
     }

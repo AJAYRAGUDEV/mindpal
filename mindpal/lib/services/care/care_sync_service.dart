@@ -103,6 +103,40 @@ class CareSyncService {
     return _client.requestLinkCode(key);
   }
 
+  /// Who is linked to this patient, and what each may do.
+  ///
+  /// Read live from the server every time rather than cached: permissions
+  /// are the thing a user is most likely to change and most needs to see
+  /// the truth about.
+  Future<List<CareLink>> listLinks() async {
+    final key = deviceKey;
+    if (key == null || key.isEmpty) return const [];
+    return _client.listLinks(key);
+  }
+
+  /// Grants or withdraws one caregiver's permissions.
+  Future<void> setPermissions({
+    required int caregiverId,
+    required Map<String, bool> permissions,
+  }) async {
+    final key = deviceKey;
+    if (key == null || key.isEmpty) {
+      throw const CareException('This phone is not sharing with anyone.');
+    }
+    await _client.setPermissions(
+      deviceKey: key,
+      caregiverId: caregiverId,
+      permissions: permissions,
+    );
+  }
+
+  /// Ends one caregiver's access, leaving any others in place.
+  Future<void> revokeCaregiver(int caregiverId) async {
+    final key = deviceKey;
+    if (key == null || key.isEmpty) return;
+    await _client.revokeLink(deviceKey: key, caregiverId: caregiverId);
+  }
+
   /// Forgets the pairing and everything that came with it.
   ///
   /// The reminders a caregiver added are removed too, with their alarms

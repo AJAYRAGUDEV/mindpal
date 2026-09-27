@@ -122,10 +122,14 @@ patient. `DELETE /api/care/device/links/:caregiverId` ends a link from the
 phone. An end-to-end check confirms a caregiver is refused before the patient
 grants, allowed after, and refused again once it is withdrawn.
 
-**Not built: the Flutter screen for it.** The patient can share a code and
-stop sharing entirely, but there is no per-permission UI on the phone yet, so
-in practice a link today grants nothing until someone calls that endpoint.
-The demo seed grants permissions directly in the database.
+The Flutter screen for it is built. **Profile > Share with someone who helps
+me** lists every linked helper with a switch per permission, all starting
+off, plus a Remove button per helper. Each switch saves the moment it is
+tapped rather than behind a Save button: this is a consent decision, and a
+user should not have to discover that a switch they flipped did not count.
+
+So the full sequence works: the patient shows a code, the caregiver redeems
+it and can do nothing, and the patient then grants what they choose.
 
 ### Not built
 

@@ -171,13 +171,25 @@ Future<void> run() async {
   check('adding a reminder is refused', blocked['error'] != null, true);
 
   stdout.writeln('\n=== 5. the PATIENT grants permission from their phone ===');
-  final caregiverId = (login['caregiver'] as Map)['id'];
-  final granted = await http.put(
-    Uri.parse('$base/api/care/device/links/$caregiverId/permissions'),
-    headers: {'Content-Type': 'application/json', 'x-device-key': deviceKey},
-    body: jsonEncode({'can_view_reminders': true, 'can_edit_reminders': true}),
+  final caregiverId = (login['caregiver'] as Map)['id'] as int;
+
+  // Through the same calls the Flutter screen makes, so this covers the
+  // client code and not only the endpoint.
+  var links = await sync.listLinks();
+  check('the phone sees the new helper', links.length, 1);
+  check('and knows their name', links.first.caregiverName, 'Meena Das');
+  check('who has been granted nothing',
+      links.first.has('can_view_reminders'), false);
+
+  await sync.setPermissions(
+    caregiverId: caregiverId,
+    permissions: {'can_view_reminders': true, 'can_edit_reminders': true},
   );
-  check('the device may grant', granted.statusCode, 200);
+
+  links = await sync.listLinks();
+  check('now allowed to view', links.first.has('can_view_reminders'), true);
+  check('now allowed to edit', links.first.has('can_edit_reminders'), true);
+  check('but still not memories', links.first.has('can_view_vault'), false);
 
   stdout.writeln('\n=== 6. caregiver creates a reminder ===');
   final created = await api(
@@ -253,10 +265,9 @@ Future<void> run() async {
   check('its alarm was cancelled', notifications.log, ['cancel $localId']);
 
   stdout.writeln('\n=== 12. permission withdrawn from the phone ===');
-  await http.put(
-    Uri.parse('$base/api/care/device/links/$caregiverId/permissions'),
-    headers: {'Content-Type': 'application/json', 'x-device-key': deviceKey},
-    body: jsonEncode({'can_edit_reminders': false}),
+  await sync.setPermissions(
+    caregiverId: caregiverId,
+    permissions: {'can_edit_reminders': false},
   );
   final refused = await api(
     'POST',
@@ -268,10 +279,9 @@ Future<void> run() async {
 
   stdout.writeln('\n=== 13. unpairing clears caregiver reminders ===');
   // Re-grant, add one, then unpair.
-  await http.put(
-    Uri.parse('$base/api/care/device/links/$caregiverId/permissions'),
-    headers: {'Content-Type': 'application/json', 'x-device-key': deviceKey},
-    body: jsonEncode({'can_edit_reminders': true}),
+  await sync.setPermissions(
+    caregiverId: caregiverId,
+    permissions: {'can_edit_reminders': true},
   );
   await api('POST', '/api/care/patients/$patientId/reminders',
       body: {'title': 'Temporary', 'hour': 12, 'minute': 0}, token: token);
