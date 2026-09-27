@@ -143,19 +143,15 @@ export function createCareRouter(db) {
     response.json({ patients: store.patientsFor(request.caregiver.id) }),
   );
 
-  router.put('/patients/:patientId/permissions', requireCaregiver, (request, response) => {
-    const patientId = Number(request.params.patientId);
-    if (!store.linkFor(request.caregiver.id, patientId)) {
-      return response.status(404).json({ error: 'Not found.' });
-    }
-    const result = store.setPermissions({
-      caregiverId: request.caregiver.id,
-      patientId,
-      permissions: request.body ?? {},
-    });
-    if (result.error) return response.status(400).json({ error: result.error });
-    return response.json({ patients: store.patientsFor(request.caregiver.id) });
-  });
+  // NOTE THE ABSENCE. There was a PUT here that let a caregiver set their
+  // own permissions. It existed so the demo could show what each setting
+  // did, and it was indefensible: consent that the party being granted
+  // access can edit is not consent.
+  //
+  // Granting now happens on the patient's own device, through
+  // PUT /device/links/:caregiverId/permissions below, which is authenticated
+  // by the device key and can only ever act on that device's own patient.
+  // The caregiver site shows permissions read-only.
 
   router.delete('/patients/:patientId/link', requireCaregiver, (request, response) => {
     store.revokeLink({
@@ -253,6 +249,7 @@ export function createCareRouter(db) {
   // no account. The key is the secret, so it travels in a header and each
   // route resolves it to exactly one patient.
 
+
   function requireDevice(request, response, next) {
     const key = request.get('x-device-key') ?? '';
     const patient = db.prepare('SELECT * FROM patients WHERE device_key = ?').get(key);
@@ -260,6 +257,76 @@ export function createCareRouter(db) {
     request.patient = patient;
     next();
   }
+
+  /** Who is linked to this patient, and what each may do. */
+  router.get('/device/links', requireDevice, (request, response) => {
+    const links = db
+      .prepare(
+        `SELECT c.id AS caregiverId, c.display_name AS caregiverName,
+                c.email, l.relationship, l.consented_at AS consentedAt,
+                l.can_view_reminders, l.can_edit_reminders,
+                l.can_view_vault, l.can_edit_vault, l.can_view_activity
+           FROM care_links l
+           JOIN caregivers c ON c.id = l.caregiver_id
+          WHERE l.patient_id = ? AND l.revoked_at IS NULL
+          ORDER BY c.display_name`,
+      )
+      .all(request.patient.id)
+      .map((row) => ({
+        caregiverId: row.caregiverId,
+        caregiverName: row.caregiverName,
+        email: row.email,
+        relationship: row.relationship,
+        consentedAt: row.consentedAt,
+        permissions: {
+          viewReminders: row.can_view_reminders === 1,
+          editReminders: row.can_edit_reminders === 1,
+          viewVault: row.can_view_vault === 1,
+          editVault: row.can_edit_vault === 1,
+          viewActivity: row.can_view_activity === 1,
+        },
+      }));
+    return response.json({ links });
+  });
+
+  /**
+   * The patient grants or withdraws one caregiver's permissions.
+   *
+   * Authenticated by the device key, so it can only ever change links that
+   * belong to THIS patient — the caregiver id in the path is checked against
+   * that, not trusted. This is the only way permissions change.
+   */
+  router.put('/device/links/:caregiverId/permissions', requireDevice, (request, response) => {
+    const caregiverId = Number(request.params.caregiverId);
+    if (!Number.isInteger(caregiverId)) {
+      return response.status(400).json({ error: 'Invalid caregiver.' });
+    }
+
+    const link = db
+      .prepare(
+        `SELECT id FROM care_links
+          WHERE caregiver_id = ? AND patient_id = ? AND revoked_at IS NULL`,
+      )
+      .get(caregiverId, request.patient.id);
+    if (!link) return response.status(404).json({ error: 'Not found.' });
+
+    const result = store.setPermissions({
+      caregiverId,
+      patientId: request.patient.id,
+      permissions: request.body ?? {},
+    });
+    if (result.error) return response.status(400).json({ error: result.error });
+    return response.json({ ok: true });
+  });
+
+  /** The patient ends a link from their own device. */
+  router.delete('/device/links/:caregiverId', requireDevice, (request, response) => {
+    store.revokeLink({
+      caregiverId: Number(request.params.caregiverId),
+      patientId: request.patient.id,
+    });
+    return response.json({ ok: true });
+  });
 
   /**
    * Everything that changed since the device last looked.

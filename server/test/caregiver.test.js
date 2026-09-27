@@ -266,6 +266,36 @@ describe('permissions', () => {
   });
 });
 
+describe('consent belongs to the patient', () => {
+  test('the store still refuses permissions on an unlinked patient', () => {
+    const carer = makeCaregiver();
+    const stranger = makePatient('Stranger', 'device-s');
+    assert.ok(store.setPermissions({
+      caregiverId: carer.id,
+      patientId: stranger.id,
+      permissions: { can_view_reminders: true },
+    }).error);
+  });
+
+  test('a granted permission can be withdrawn again', () => {
+    const carer = makeCaregiver();
+    const patient = makePatient();
+    linkFully(carer.id, patient.id);
+    assert.equal(store.may(carer.id, patient.id, 'can_edit_reminders'), true);
+
+    // This is what the patient's device calls.
+    store.setPermissions({
+      caregiverId: carer.id,
+      patientId: patient.id,
+      permissions: { can_edit_reminders: false },
+    });
+
+    assert.equal(store.may(carer.id, patient.id, 'can_edit_reminders'), false);
+    // Viewing was not mentioned, so it is untouched.
+    assert.equal(store.may(carer.id, patient.id, 'can_view_reminders'), true);
+  });
+});
+
 describe('reminders', () => {
   test('created, listed, updated and soft-deleted', () => {
     const carer = makeCaregiver();

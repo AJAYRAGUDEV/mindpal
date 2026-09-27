@@ -218,3 +218,12 @@ code { background: #fff; padding: 1px 5px; border-radius: 4px; font-size: 13px; 
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 560px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.perm-list { list-style: none; padding: 0; margin: 12px 0; }
+.perm-list li {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+.perm-list li.on { color: var(--primary-dark); font-weight: 600; }
+.perm-list li.off { color: var(--ink-soft); }

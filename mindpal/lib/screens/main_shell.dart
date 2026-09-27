@@ -12,6 +12,7 @@ import '../services/game_history_service.dart';
 import '../services/memory_aid_service.dart';
 import '../services/memory_vault_service.dart';
 import '../services/notification_service.dart';
+import '../services/care/care_sync_service.dart';
 import '../services/voice/voice_controller.dart';
 import '../services/profile_service.dart';
 import '../services/reminder_service.dart';
@@ -27,6 +28,7 @@ import 'profile_screen.dart';
 import 'reminders/add_reminder_screen.dart';
 import 'reminders/reminder_details_screen.dart';
 import 'reminders/reminders_screen.dart';
+import 'settings/caregiver_link_screen.dart';
 import 'settings/notification_check_screen.dart';
 
 /// Named tab indexes.
@@ -68,6 +70,7 @@ class MainShell extends StatefulWidget {
     required this.memoryAidService,
     required this.memoryVaultService,
     this.voice,
+    this.careSync,
     required this.gameHistoryService,
     required this.aiService,
     this.storageHealthy = true,
@@ -79,6 +82,7 @@ class MainShell extends StatefulWidget {
   final MemoryAidService memoryAidService;
   final MemoryVaultService memoryVaultService;
   final VoiceController? voice;
+  final CareSyncService? careSync;
   final GameHistoryService gameHistoryService;
   final AiService aiService;
 
@@ -89,7 +93,7 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentIndex = AppTab.home;
 
   UserProfile _profile = UserProfile.empty;
@@ -117,6 +121,7 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
 
     // A tap on a reminder notification while the app is running or in the
@@ -128,8 +133,50 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notificationTaps?.cancel();
     super.dispose();
+  }
+
+  /// Sync when the app returns to the foreground.
+  ///
+  /// Not on every resume in practice: CareSyncService keeps a two-minute
+  /// floor, so flicking back and forth does not hammer a free-tier server.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncCare();
+  }
+
+  /// Pulls caregiver reminders and folds them into the live list.
+  ///
+  /// Never blocks and never shows an error: being offline is the normal
+  /// case for this app, and the reminders already on the phone keep working
+  /// exactly as they did.
+  Future<void> _syncCare({bool force = false}) async {
+    final sync = widget.careSync;
+    if (sync == null || !sync.isPaired) return;
+
+    final report = await sync.sync(
+      _reminders,
+      force: force,
+      onChanged: (updated) {
+        if (mounted) setState(() => _reminders = updated);
+      },
+    );
+
+    if (!mounted || !report.changedAnything) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          report.total == 1
+              ? 'One reminder was updated by someone who helps you.'
+              : '${report.total} reminders were updated by someone who '
+                    'helps you.',
+          style: const TextStyle(fontSize: 18),
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
   }
 
   Future<void> _loadData() async {
@@ -156,6 +203,10 @@ class _MainShellState extends State<MainShell> {
       await widget.reminderService.rescheduleAll(reminders);
 
       await _refreshAlarmStatus();
+
+      // Launch sync: forced past the rate limit, because opening the app is
+      // exactly when a patient expects to see what changed overnight.
+      await _syncCare(force: true);
 
       // Cold start from a notification tap: open on the Reminders tab.
       final launchedFrom = await widget.notificationService.launchReminderId();
@@ -219,6 +270,26 @@ class _MainShellState extends State<MainShell> {
     return isTomorrow
         ? 'It will ring tomorrow at ${reminder.formattedTime}.'
         : 'It will ring at ${reminder.formattedTime}.';
+  }
+
+  Future<void> _openCaregivers() async {
+    final sync = widget.careSync;
+    if (sync == null) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CaregiverLinkScreen(
+          sync: sync,
+          patientName: _profile.name,
+          onUnpaired: () async {
+            final updated = await sync.unpair(_reminders);
+            if (mounted) setState(() => _reminders = updated);
+          },
+        ),
+      ),
+    );
+    // A new pairing means there may already be reminders waiting.
+    if (mounted) await _syncCare(force: true);
   }
 
   Future<void> _openNotificationCheck() async {
@@ -470,7 +541,12 @@ class _MainShellState extends State<MainShell> {
         service: widget.memoryAidService,
         vault: widget.memoryVaultService,
       ),
-      ProfileScreen(profile: _profile, onSave: _saveProfile),
+      ProfileScreen(
+        profile: _profile,
+        onSave: _saveProfile,
+        onOpenCaregivers:
+            widget.careSync?.isConfigured == true ? _openCaregivers : null,
+      ),
     ];
 
     return Scaffold(

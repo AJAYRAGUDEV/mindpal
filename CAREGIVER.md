@@ -80,18 +80,29 @@ anything typed during a demo is gone after the next push.
 Fixes, in order of effort: a Render **persistent disk** (paid, one setting),
 or a hosted Postgres. The schema is ordinary SQL and the store is one file.
 
-### The patient's phone does not sync yet
+### Sync is built. Ringing on a real phone is still unverified
 
-`GET /api/care/device/sync?since=<rev>` is built and tested — it returns
-every reminder changed since a revision number, including deletions. **The
-Flutter app does not call it.** Nothing in the patient app talks to this
-database, so a reminder added on the website does not reach a phone today.
+The Flutter sync client exists and is tested end to end against a running
+server: pairing, create, edit, delete, offline, unpair — 30 checks in
+`mindpal/test/care_live_e2e.dart`, plus 17 unit tests in
+`care_sync_test.dart`.
 
-What remains: a sync client in Flutter that stores the device key and the
-last revision, polls on launch and on resume, and writes results through the
-existing `ReminderService` so alarms are scheduled by the code that already
-works. Deliberately pull-based — no Firebase, and a phone offline for a week
-catches up in one request.
+**What is NOT verified: that an Android phone actually rings.** No device is
+attached here. The chain is proven as far as
+`NotificationService.schedule()` being called with the right id at the right
+time; whether Android then fires the alarm is the same unverified step the
+reminder feature has always had.
+
+How it works: the phone pulls `GET /api/care/device/sync?since=<rev>` on
+launch and on resume, with a two-minute floor so flicking back into the app
+does not hammer a free instance. Pull, not push — no Firebase, and a phone
+offline for a week catches up in one request.
+
+**Duplicate notifications** are prevented by a stored map from remote id to
+local id. A remote reminder that is already known updates the local one it
+maps to, so `ReminderService.update` cancels the old alarm before scheduling
+the new one and the id never changes. Syncing twice with no server changes
+does nothing at all — there is a test named for exactly that.
 
 ### Media upload is not built
 
@@ -100,12 +111,21 @@ upload. It needs a place to put bytes that survives a restart, which the free
 tier does not have, and doing it against ephemeral disk would mean uploads
 that vanish — worse than not offering it.
 
-### Permissions are editable by the wrong person
+### Permissions now belong to the patient
 
-The site lets a caregiver change their own permissions, which is obviously
-not how consent works. It is there so the demo can show what each setting
-does. In the finished product only the patient may change them, on their own
-phone; the server would refuse the request.
+Fixed. The route that let a caregiver grant themselves access is gone. The
+caregiver site shows permissions read-only and says who to ask.
+
+Granting happens through `PUT /api/care/device/links/:caregiverId/permissions`,
+authenticated by the device key, so it can only ever act on that device's own
+patient. `DELETE /api/care/device/links/:caregiverId` ends a link from the
+phone. An end-to-end check confirms a caregiver is refused before the patient
+grants, allowed after, and refused again once it is withdrawn.
+
+**Not built: the Flutter screen for it.** The patient can share a code and
+stop sharing entirely, but there is no per-permission UI on the phone yet, so
+in practice a link today grants nothing until someone calls that endpoint.
+The demo seed grants permissions directly in the database.
 
 ### Not built
 

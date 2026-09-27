@@ -15,6 +15,7 @@ import 'services/notification_service.dart';
 import 'services/notifications/notification_service_factory.dart';
 import 'services/voice/voice_controller.dart';
 import 'services/profile_service.dart';
+import 'services/care/care_sync_service.dart';
 import 'services/reminder_service.dart';
 import 'storage/local_storage.dart';
 import 'storage/shared_prefs_storage.dart';
@@ -123,6 +124,15 @@ Future<void> main() async {
   final languageService = LanguageService(storage);
   final language = await languageService.loadSelected();
 
+  // Caregiver sync. Built here so it shares one ReminderService with the
+  // rest of the app: a reminder that arrives from the website is scheduled
+  // by exactly the code that schedules one the patient typed, which is why
+  // its alarms behave identically.
+  final careSync = CareSyncService(
+    storage,
+    ReminderService(storage, notifications),
+  );
+
   runApp(
     MindPalApp(
       profileService: ProfileService(storage),
@@ -137,6 +147,7 @@ Future<void> main() async {
       aiService: aiService,
       languageService: languageService,
       voice: voice,
+      careSync: careSync,
       initialLanguage: language,
       storageHealthy: storageHealthy,
     ),

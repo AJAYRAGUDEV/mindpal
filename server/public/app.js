@@ -159,13 +159,6 @@ const PERMISSION_LABELS = {
   viewActivity: 'See activity',
 };
 
-const PERMISSION_KEYS = {
-  viewReminders: 'can_view_reminders',
-  editReminders: 'can_edit_reminders',
-  viewVault: 'can_view_vault',
-  editVault: 'can_edit_vault',
-  viewActivity: 'can_view_activity',
-};
 
 function renderPatients() {
   const container = $('patients');
@@ -232,38 +225,28 @@ function editPermissions(patientId) {
   openPatientId = null;
   detail.hidden = false;
 
+  // READ ONLY, deliberately. A caregiver used to be able to tick these,
+  // which meant the person being granted access controlled the consent.
+  // Granting now happens on the patient's own phone, and the server has no
+  // route that would let this page change them.
   detail.innerHTML = `
     <div class="card">
       <h2>What ${escapeHtml(patient.displayName)} allows you to do</h2>
-      <p class="notice">
-        In the finished product only the person themselves may change this,
-        on their own phone. It is editable here so the demo can show what
-        each setting does.
-      </p>
-      <form id="perm-form">
+      <ul class="perm-list">
         ${Object.entries(PERMISSION_LABELS).map(([key, label]) => `
-          <label style="font-weight:400">
-            <input type="checkbox" name="${key}" ${patient.permissions[key] ? 'checked' : ''}>
-            ${label}
-          </label>`).join('')}
-        <button type="submit" class="primary">Save</button>
-      </form>
+          <li class="${patient.permissions[key] ? 'on' : 'off'}">
+            ${patient.permissions[key] ? '✓' : '✗'} ${label}
+          </li>`).join('')}
+      </ul>
+      <p class="notice">
+        Only ${escapeHtml(patient.displayName)} can change these, on their own
+        phone: <strong>Profile &rsaquo; People who help me</strong>. Ask them
+        if you need something you do not have.
+      </p>
+      <button id="close-perms" class="secondary">Close</button>
     </div>`;
 
-  $('perm-form').onsubmit = async (event) => {
-    event.preventDefault();
-    const body = {};
-    for (const [key, column] of Object.entries(PERMISSION_KEYS)) {
-      body[column] = event.target.elements[key].checked;
-    }
-    try {
-      const data = await call(`/patients/${patientId}/permissions`, { method: 'PUT', body });
-      patients = data.patients;
-      renderPatients();
-      toast('Saved.');
-      detail.hidden = true;
-    } catch (error) { toast(error.message, true); }
-  };
+  $('close-perms').onclick = () => { detail.hidden = true; };
 }
 
 // ---------------------------------------------------------------- detail

@@ -18,12 +18,17 @@ class ProfileScreen extends StatefulWidget {
     super.key,
     required this.profile,
     required this.onSave,
+    this.onOpenCaregivers,
   });
 
   final UserProfile profile;
 
   /// May throw an [AppException] if saving fails.
   final Future<void> Function(UserProfile profile) onSave;
+
+  /// Opens the caregiver-sharing screen. Null when this build has no
+  /// backend configured, and the row is then simply not shown.
+  final VoidCallback? onOpenCaregivers;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -118,6 +123,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _FieldLabel(LanguageScope.of(context).appLanguage),
           const LanguageSettingRow(),
           const SizedBox(height: AppSizes.gapLarge),
+
+          if (widget.onOpenCaregivers != null) ...[
+            const _FieldLabel('People who help me'),
+            OutlinedButton.icon(
+              onPressed: widget.onOpenCaregivers,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 64),
+                alignment: Alignment.centerLeft,
+              ),
+              icon: const Icon(Icons.people_outline_rounded, size: 30),
+              label: const Text('Share with someone who helps me'),
+            ),
+            const SizedBox(height: AppSizes.gapLarge),
+          ],
 
           const _FieldLabel('Caregiver name'),
           TextFormField(
