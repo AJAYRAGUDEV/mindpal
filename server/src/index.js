@@ -1,5 +1,11 @@
 import cors from 'cors';
 import express from 'express';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { openDatabase } from './db/database.js';
+import { createCareRouter } from './caregiver/routes.js';
+import { seedDemoData } from './caregiver/demo.js';
 
 import { RateLimiter, TtlCache } from './cache.js';
 import { config, isGeminiConfigured, redact } from './config.js';
@@ -46,6 +52,21 @@ app.use(
 );
 app.use(express.json({ limit: '32kb' }));
 
+// ---------------------------------------------------------------- caregiver
+//
+// A second product sharing one process: the patient app's Gemini gateway and
+// the caregiver website. They are separate concerns and separate routers,
+// mounted side by side so there is one thing to deploy and one URL to
+// remember. Nothing below touches /api/ai.
+const careDatabase = openDatabase();
+const demo = seedDemoData(careDatabase);
+const { router: careRouter } = createCareRouter(careDatabase);
+app.use('/api/care', careRouter);
+
+// The site itself. Static files, no build step.
+const here = dirname(fileURLToPath(import.meta.url));
+app.use(express.static(join(here, '..', 'public')));
+
 const cache = new TtlCache();
 const limiter = new RateLimiter({ maxPerMinute: config.maxRequestsPerMinute });
 
@@ -76,7 +97,9 @@ function describeRequest(payload, request) {
 /// Opening the bare root URL in a browser is the first thing anyone does, and
 /// a bare 404 there looks like the server is broken when it is fine. This says
 /// what the server is and where the real endpoints are.
-app.get('/', (_request, response) => {
+// The caregiver site is served at / by express.static above, so this JSON
+// description moves to /api where it does not shadow index.html.
+app.get('/api', (_request, response) => {
   response.json({
     service: 'MindPal AI gateway',
     running: true,
@@ -84,6 +107,8 @@ app.get('/', (_request, response) => {
     endpoints: {
       health: 'GET /api/health',
       ai: 'POST /api/ai',
+      caregiverSite: 'GET /',
+      caregiverApi: 'POST /api/care/login',
     },
     hint: 'Open /api/health to check the key is loaded.',
   });
@@ -346,6 +371,11 @@ app.listen(config.port, () => {
       : 'Fallback models: none',
   );
   console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
+  console.log(
+    demo.seeded
+      ? `Caregiver site at / with demo accounts (password ${demo.password})`
+      : 'Caregiver site at / (existing data kept)',
+  );
   console.log(
     isGeminiConfigured()
       ? 'GEMINI_API_KEY is set.'

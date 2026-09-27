@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MindPal for Caregivers</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-inner">
+    <h1>MindPal <span>for caregivers</span></h1>
+    <div id="who" class="who" hidden>
+      <span id="who-name"></span>
+      <button id="logout" class="link-button">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- Signed out -->
+  <section id="auth" class="card narrow">
+    <div class="tabs">
+      <button id="tab-login" class="tab active">Sign in</button>
+      <button id="tab-register" class="tab">Create an account</button>
+    </div>
+
+    <form id="login-form">
+      <label for="login-email">Email</label>
+      <input id="login-email" type="email" autocomplete="username" required>
+      <label for="login-password">Password</label>
+      <input id="login-password" type="password" autocomplete="current-password" required>
+      <button type="submit" class="primary">Sign in</button>
+    </form>
+
+    <form id="register-form" hidden>
+      <label for="reg-name">Your name</label>
+      <input id="reg-name" type="text" autocomplete="name" required>
+      <label for="reg-email">Email</label>
+      <input id="reg-email" type="email" autocomplete="username" required>
+      <label for="reg-password">Password</label>
+      <input id="reg-password" type="password" autocomplete="new-password" required>
+      <p class="hint">At least 10 characters.</p>
+      <button type="submit" class="primary">Create account</button>
+    </form>
+
+    <div class="demo-note">
+      <strong>Demo accounts</strong>
+      <p>
+        <code>meena@example.com</code> — cares for Bimala, can edit reminders.<br>
+        <code>rahul@example.com</code> — same patient, <em>view only</em>.<br>
+        Password for both: <code>mindpal-demo-2026</code>
+      </p>
+      <p class="hint">
+        Fictional people. Sign in as each to see that permissions differ per
+        caregiver, not per patient.
+      </p>
+    </div>
+  </section>
+
+  <!-- Signed in -->
+  <section id="dashboard" hidden>
+    <div class="row-between">
+      <h2>People you care for</h2>
+      <button id="show-link" class="secondary">Link a new person</button>
+    </div>
+
+    <form id="link-form" class="card" hidden>
+      <p>
+        Ask the person you care for to open MindPal, go to
+        <strong>Profile &rsaquo; Share with a caregiver</strong>, and read you
+        the code. It expires after 15 minutes.
+      </p>
+      <label for="link-code">Their code</label>
+      <input id="link-code" type="text" autocapitalize="characters" maxlength="8" required>
+      <label for="link-rel">Your relationship to them</label>
+      <input id="link-rel" type="text" placeholder="Daughter, son, friend…">
+      <button type="submit" class="primary">Link</button>
+    </form>
+
+    <div id="patients" class="patients"></div>
+
+    <div id="detail" hidden></div>
+  </section>
+
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="./app.js"></script>
+</body>
+</html>
