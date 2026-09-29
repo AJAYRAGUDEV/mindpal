@@ -147,7 +147,8 @@ app.post('/api/adventure', async (request, response) => {
   const started = Date.now();
   const log = (line) => console.log(`[adventure] ${id} ${line}`);
 
-  const { slots, soldOutOptions, currentText, seed } = request.body ?? {};
+  const { slots, soldOutOptions, currentText, itemNames, seed } =
+    request.body ?? {};
 
   if (!Array.isArray(slots) || slots.length === 0) {
     return response.status(400).json({
@@ -187,6 +188,7 @@ app.post('/api/adventure', async (request, response) => {
       currentText: currentText ?? {},
       soldOutItemId,
       alternativeItemId,
+      itemNames: itemNames ?? {},
       seed: typeof seed === 'string' ? seed.slice(0, 40) : undefined,
       log,
     });

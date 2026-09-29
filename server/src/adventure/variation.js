@@ -39,9 +39,14 @@ Rules you must follow:
 - Never threaten, rush or scold the player. There are no timers and no failure.
 - Never mention scores, points, levels, dementia, memory loss, therapy or any
   medical idea.
-- Keep the MEANING of each original line. You are rewording the same story, not
-  writing a different one. A line that gave the player a fact must still give
-  that fact; a line that asked a question must still ask it.
+- Keep the MEANING of each original line. You are rewording one story, not
+  writing another. A line that gave the player a fact must still give that
+  fact, about the same thing; a line that asked a question must still ask it.
+  A clue must still point where it pointed. This is the most important rule
+  here: the player solves a mystery by reasoning from these sentences, so a
+  clue that quietly changes subject makes the puzzle unsolvable.
+- Never write an internal id such as palm_sugar or clue_basket into a sentence.
+  Use the ordinary name of the thing.
 - Keep every name of a real object exactly as it is given to you (foods, tools,
   instruments, cloth). Those are real cultural objects and must not be renamed
   or invented.
@@ -57,14 +62,28 @@ Return only the JSON object. Every key must come from the list you were given.
  * Builds the prompt: the slots, their current text, and the one mechanical
  * choice being made.
  */
-function buildPrompt({ slots, currentText, soldOutItemId, alternativeItemId, seed }) {
+function buildPrompt({
+  slots,
+  currentText,
+  soldOutItemId,
+  alternativeItemId,
+  itemNames = {},
+  seed,
+}) {
+  // Names, never ids. A prompt that says `palm_sugar` gets `palm_sugar` back in
+  // a sentence a player then reads.
+  const soldOutName = itemNames[soldOutItemId] ?? soldOutItemId;
+  const alternativeName = itemNames[alternativeItemId] ?? alternativeItemId;
+
   const lines = [
-    'Rewrite each of these slots. Keep the meaning, change the wording.',
+    'Reword each slot below. The CURRENT TEXT is given after each slot name.',
+    'Say the same thing in different words. Do not change what happens, who',
+    'knows what, or what any line tells the player.',
     '',
-    `In this telling, the market has run out of "${soldOutItemId}".`,
-    `The acceptable alternative is "${alternativeItemId}".`,
-    'Any line that mentions what has sold out must name the item above, and the',
-    'line that explains the alternative must name the alternative above.',
+    `In this telling the market has run out of ${soldOutName}.`,
+    `${alternativeName} is the acceptable alternative.`,
+    'Only the lines that already talk about what has sold out should mention',
+    'this. Leave every other line about its own subject.',
     '',
   ];
 
@@ -137,6 +156,7 @@ export async function generateAdventureText({
   currentText = {},
   soldOutItemId,
   alternativeItemId,
+  itemNames = {},
   seed,
   log = () => {},
 }) {
@@ -169,6 +189,7 @@ export async function generateAdventureText({
           currentText,
           soldOutItemId,
           alternativeItemId,
+          itemNames,
           seed,
         }),
         // No responseSchema: the key set is decided by the app and changes with

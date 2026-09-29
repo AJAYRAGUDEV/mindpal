@@ -70,7 +70,8 @@ class AdventureGenerator {
       return _fallback(['This build has no backend configured.']);
     }
 
-    final slots = slotNamesFor(kPongalAdventure);
+    // The words as they stand, so the model rewords rather than invents.
+    final current = slotTextFor(kPongalAdventure);
     Map<String, dynamic> body;
 
     try {
@@ -79,7 +80,9 @@ class AdventureGenerator {
             Uri.parse('$_baseUrl/api/adventure'),
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode({
-              'slots': slots,
+              'slots': current.keys.toList(),
+              'currentText': current,
+              'itemNames': itemNamesFor(kPongalAdventure),
               'soldOutOptions': VariationPlan.allowedSoldOutItems,
               if (seedWord != null && seedWord.trim().isNotEmpty)
                 'seed': seedWord.trim(),

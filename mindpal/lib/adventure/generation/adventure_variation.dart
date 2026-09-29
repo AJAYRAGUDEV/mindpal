@@ -90,47 +90,69 @@ class AdventureTextPack {
       });
 }
 
-/// Every slot name in an adventure, in a stable order.
+/// Every slot in an adventure, with the words currently in it.
 ///
-/// The server asks Gemini for exactly these keys. Generating the list from the
-/// adventure means a new character or a new line is automatically offered for
-/// rewriting, with no second list to remember to update.
-List<String> slotNamesFor(Adventure adventure) => [
-  'title',
-  'intro',
-  'objective',
-  for (final person in adventure.characters) ...[
-    'char.${person.id}.name',
-    'char.${person.id}.role',
-    for (final node in person.nodes) ...[
+/// **The current text is the important half.** Sending only the slot NAMES was
+/// the first version, and it produced exactly what you would expect: asked for
+/// `clue.clue_basket.text` with no further information, the model wrote a
+/// sentence about the market running out of jaggery. That is not the clue. The
+/// mystery still validated — the structure was untouched — and was no longer
+/// solvable by reasoning, because its evidence no longer pointed anywhere.
+///
+/// With the original words in hand the job becomes rewording, which is what
+/// "bounded variation" was always supposed to mean.
+///
+/// Generating this from the adventure means a new character or a new line is
+/// automatically offered for rewriting, with no second list to maintain.
+Map<String, String> slotTextFor(Adventure adventure) => {
+  'title': adventure.title,
+  'intro': adventure.intro,
+  'objective': adventure.objective,
+  for (final person in adventure.characters) ...{
+    'char.${person.id}.name': person.name,
+    'char.${person.id}.role': person.role,
+    for (final node in person.nodes) ...{
       for (var i = 0; i < node.lines.length; i++)
-        'node.${person.id}.${node.id}.line.$i',
-      for (final choice in node.choices) ...[
-        'choice.${person.id}.${node.id}.${choice.id}.text',
+        'node.${person.id}.${node.id}.line.$i': node.lines[i],
+      for (final choice in node.choices) ...{
+        'choice.${person.id}.${node.id}.${choice.id}.text': choice.text,
         if (choice.reply != null)
-          'choice.${person.id}.${node.id}.${choice.id}.reply',
-      ],
-    ],
-  ],
+          'choice.${person.id}.${node.id}.${choice.id}.reply': choice.reply!,
+      },
+    },
+  },
   for (final request in adventure.market.requests)
-    'request.${request.id}.label',
-  for (final stall in adventure.market.stalls) 'stall.${stall.id}.keeperLine',
-  'mystery.question',
-  'mystery.reveal',
-  'mystery.wrongLocation',
-  'mystery.wrongClues',
-  for (final clue in adventure.mystery.clues) 'clue.${clue.id}.text',
-  for (final step in adventure.quests) ...[
-    'quest.${step.id}.title',
-    'quest.${step.id}.detail',
-    if (step.hint != null) 'quest.${step.id}.hint',
-  ],
-  for (final ending in adventure.endings) ...[
-    'ending.${ending.id}.title',
-    'ending.${ending.id}.text',
-    'ending.${ending.id}.celebration',
-  ],
-];
+    'request.${request.id}.label': request.label,
+  for (final stall in adventure.market.stalls)
+    'stall.${stall.id}.keeperLine': stall.keeperLine,
+  'mystery.question': adventure.mystery.question,
+  'mystery.reveal': adventure.mystery.revealText,
+  'mystery.wrongLocation': adventure.mystery.wrongLocationHint,
+  'mystery.wrongClues': adventure.mystery.wrongCluesHint,
+  for (final clue in adventure.mystery.clues)
+    'clue.${clue.id}.text': clue.text,
+  for (final step in adventure.quests) ...{
+    'quest.${step.id}.title': step.title,
+    'quest.${step.id}.detail': step.detail,
+    if (step.hint != null) 'quest.${step.id}.hint': step.hint!,
+  },
+  for (final ending in adventure.endings) ...{
+    'ending.${ending.id}.title': ending.title,
+    'ending.${ending.id}.text': ending.text,
+    'ending.${ending.id}.celebration': ending.celebration,
+  },
+};
+
+/// The slot names, in a stable order. Always the keys of [slotTextFor], so the
+/// two can never disagree about what exists.
+List<String> slotNamesFor(Adventure adventure) =>
+    slotTextFor(adventure).keys.toList();
+
+/// What every item is actually called, so the prompt can talk about "jaggery"
+/// rather than leaking `palm_sugar` into a sentence a player reads.
+Map<String, String> itemNamesFor(Adventure adventure) => {
+  for (final item in adventure.items) item.id: item.name,
+};
 
 /// Builds a new adventure from the template, the plan and the words.
 ///

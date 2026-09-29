@@ -17,9 +17,16 @@ class _FakeServer extends http.BaseClient {
   final int status;
   int calls = 0;
 
+  /// What the app actually sent, so a test can assert the model is given
+  /// enough to reword rather than invent.
+  Map<String, dynamic> lastRequest = const {};
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     calls++;
+    if (request is http.Request) {
+      lastRequest = jsonDecode(request.body) as Map<String, dynamic>;
+    }
     return http.StreamedResponse(
       Stream.value(utf8.encode(body)),
       status,
@@ -204,6 +211,36 @@ void main() {
       expect(slots.where((s) => s.contains('effect')), isEmpty);
     });
 
+    test('every slot carries the text it is asking to replace', () {
+      final text = slotTextFor(kPongalAdventure);
+
+      expect(text['title'], kPongalAdventure.title);
+      expect(text['intro'], kPongalAdventure.intro);
+      expect(
+        text['char.ammal.role'],
+        kPongalAdventure.character('ammal')!.role,
+      );
+      expect(
+        text['ending.ending_together.celebration'],
+        kPongalAdventure.ending('ending_together')!.celebration,
+      );
+      expect(
+        text['quest.q_shop.hint'],
+        kPongalAdventure.quests.firstWhere((q) => q.id == 'q_shop').hint,
+      );
+      // None of it is empty, or there would be nothing to reword.
+      for (final entry in text.entries) {
+        expect(entry.value.trim(), isNotEmpty, reason: entry.key);
+      }
+    });
+
+    test('the names and the text always describe the same slots', () {
+      expect(
+        slotNamesFor(kPongalAdventure),
+        slotTextFor(kPongalAdventure).keys.toList(),
+      );
+    });
+
     test('slot names stay unique', () {
       final slots = slotNamesFor(kPongalAdventure);
       expect(slots.toSet().length, slots.length);
@@ -275,6 +312,41 @@ void main() {
       expect(grain.soldOutItemIds, {'clay_pot'});
       // And it is genuinely playable.
       expect(validator.validate(result.adventure).isValid, isTrue);
+    });
+
+    test('the request carries the words to be reworded', () async {
+      // Sending only slot NAMES was the original bug. Asked for
+      // `clue.clue_basket.text` with nothing else, the model wrote a sentence
+      // about the market running out of jaggery — which is not the clue. The
+      // mystery still validated and was no longer solvable by reasoning.
+      final server = _FakeServer(jsonEncode({'success': true, 'text': {}}));
+      final generator = AdventureGenerator(
+        httpClient: server,
+        baseUrl: 'https://example.test',
+      );
+
+      await generator.generate();
+
+      final sent = server.lastRequest;
+      final current = sent['currentText'] as Map<String, dynamic>;
+
+      expect(current, isNotEmpty);
+      expect(current['title'], kPongalAdventure.title);
+      expect(
+        current['clue.clue_basket.text'],
+        kPongalAdventure.clue('clue_basket')!.text,
+      );
+      // Every slot asked for has its current wording alongside it.
+      expect(
+        (sent['slots'] as List).toSet(),
+        current.keys.toSet(),
+      );
+
+      // And the real names of things, so no sentence comes back saying
+      // "palm_sugar".
+      final names = sent['itemNames'] as Map<String, dynamic>;
+      expect(names['palm_sugar'], 'Palm sugar');
+      expect(names['jaggery'], 'Jaggery');
     });
 
     test('a sold-out item the app does not allow is ignored', () async {
