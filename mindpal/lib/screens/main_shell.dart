@@ -9,6 +9,7 @@ import '../adventure/model/adventure.dart';
 import '../adventure/storage/adventure_store.dart';
 import '../adventure/ui/adventure_home_screen.dart';
 import '../adventure/ui/adventure_library_screens.dart';
+import '../adventure/ui/festival_chooser_screen.dart';
 import '../content/pack_library.dart';
 import '../models/game_result.dart';
 import '../models/game_settings.dart';
@@ -39,6 +40,7 @@ import 'reminders/reminder_details_screen.dart';
 import 'reminders/reminders_screen.dart';
 import 'settings/caregiver_link_screen.dart';
 import 'settings/notification_check_screen.dart';
+import 'settings/voice_screen.dart';
 
 /// Named tab indexes.
 ///
@@ -183,7 +185,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   ///
   /// A refusal is never silent and never leaves the player with nothing: the
   /// bundled adventure comes back instead, with the reason.
-  Future<Adventure?> _generateAdventure(BuildContext context) async {
+  Future<Adventure?> _generateAdventure(
+    BuildContext context,
+    FestivalChoice choice,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     showDialog<void>(
       context: context,
@@ -204,7 +209,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       ),
     );
 
-    final result = await _generator.generate();
+    final result = await _generator.generate(
+      festival: choice.festival,
+      seedWord: choice.mood,
+    );
     if (!mounted) return null;
     // `context` here is MainShell's own, and `mounted` above is MainShell's
     // State. The dialog is dismissed through the root navigator because it was
@@ -225,6 +233,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       ),
     );
     return null;
+  }
+
+  Future<void> _openVoiceSettings() async {
+    final voice = widget.voice;
+    if (voice == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => VoiceScreen(voice: voice)),
+    );
   }
 
   String? _extrasTitle(AppStrings strings) => switch (_extrasView) {
@@ -680,6 +696,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           onOpenMemories: () => _openExtras(ExtrasView.memories),
           onOpenProfile: () => _openExtras(ExtrasView.profile),
           onOpenAssistant: _openCompanion,
+          onOpenVoice: widget.voice == null ? null : _openVoiceSettings,
         ),
         ExtrasView.reminders => RemindersScreen(
           reminders: _reminders,

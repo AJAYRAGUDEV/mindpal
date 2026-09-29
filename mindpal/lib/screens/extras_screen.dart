@@ -19,6 +19,7 @@ class ExtrasScreen extends StatelessWidget {
     required this.onOpenMemories,
     required this.onOpenProfile,
     required this.onOpenAssistant,
+    this.onOpenVoice,
     this.reminderCount = 0,
   });
 
@@ -27,6 +28,11 @@ class ExtrasScreen extends StatelessWidget {
   final VoidCallback onOpenMemories;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenAssistant;
+
+  /// Null in builds with no speech controller at all, in which case the row is
+  /// absent rather than opening a screen with nothing on it.
+  final VoidCallback? onOpenVoice;
+
   final int reminderCount;
 
   @override
@@ -69,6 +75,16 @@ class ExtrasScreen extends StatelessWidget {
           color: AppColors.primary,
           onTap: onOpenAssistant,
         ),
+        if (onOpenVoice != null) ...[
+          const SizedBox(height: AppSizes.gap),
+          _ExtraRow(
+            icon: Icons.record_voice_over_rounded,
+            label: 'The reading voice',
+            detail: 'Choose which voice reads things aloud, and hear it first',
+            color: AppColors.activity,
+            onTap: onOpenVoice!,
+          ),
+        ],
         const SizedBox(height: AppSizes.gap),
         _ExtraRow(
           icon: Icons.person_rounded,

@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../config/api_config.dart';
+import '../content/festival_skin.dart';
+import '../content/festivals.dart';
 import '../content/pongal_adventure.dart';
 import '../model/adventure.dart';
 import '../validation/adventure_validator.dart';
@@ -65,13 +67,20 @@ class AdventureGenerator {
   /// model having a bad day. Those come back as a [GenerationResult] carrying
   /// the bundled adventure and the reason, because a player who pressed "make
   /// me an adventure" should still get an adventure.
-  Future<GenerationResult> generate({String? seedWord}) async {
+  Future<GenerationResult> generate({
+    FestivalSkin? festival,
+    String? seedWord,
+  }) async {
+    final skin = festival ?? kFestivals.first;
+    final base = adventureForFestival(skin);
+
     if (!isConfigured) {
-      return _fallback(['This build has no backend configured.']);
+      return _fallback(['This build has no backend configured.'], base);
     }
 
-    // The words as they stand, so the model rewords rather than invents.
-    final current = slotTextFor(kPongalAdventure);
+    // The words as they stand FOR THIS FESTIVAL, so the model rewords Bihu
+    // when Bihu was chosen rather than quietly rewording Pongal.
+    final current = slotTextFor(base);
     Map<String, dynamic> body;
 
     try {
@@ -82,7 +91,9 @@ class AdventureGenerator {
             body: jsonEncode({
               'slots': current.keys.toList(),
               'currentText': current,
-              'itemNames': itemNamesFor(kPongalAdventure),
+              'itemNames': itemNamesFor(base),
+              'festival': skin.name,
+              'region': skin.region,
               'soldOutOptions': VariationPlan.allowedSoldOutItems,
               if (seedWord != null && seedWord.trim().isNotEmpty)
                 'seed': seedWord.trim(),
@@ -94,14 +105,14 @@ class AdventureGenerator {
         return _fallback([
           'The server could not make one just now '
               '(${response.statusCode}).',
-        ]);
+        ], base);
       }
       body = jsonDecode(response.body) as Map<String, dynamic>;
     } catch (error) {
       debugPrint('Adventure generation failed: ${error.runtimeType}');
       return _fallback([
         'MindPal could not reach the internet to make a new adventure.',
-      ]);
+      ], base);
     }
 
     // The sold-out item is a mechanical choice, so it is checked against the
@@ -119,7 +130,8 @@ class AdventureGenerator {
     );
 
     final adventure = applyVariation(
-      id: 'generated_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'generated_${skin.id}_${DateTime.now().millisecondsSinceEpoch}',
+      festival: skin,
       text: text,
       plan: plan,
     );
@@ -129,14 +141,19 @@ class AdventureGenerator {
     final report = const AdventureValidator().validate(adventure);
     if (!report.isValid) {
       debugPrint('Generated adventure rejected: ${report.problems}');
-      return _fallback(report.problems);
+      return _fallback(report.problems, base);
     }
 
     return GenerationResult(adventure: adventure, problems: const []);
   }
 
-  GenerationResult _fallback(List<String> problems) =>
-      GenerationResult(adventure: kPongalAdventure, problems: problems);
+  /// The bundled adventure for the festival they asked for, so a failed
+  /// generation still gives them the festival they chose.
+  GenerationResult _fallback(List<String> problems, [Adventure? base]) =>
+      GenerationResult(
+        adventure: base ?? kPongalAdventure,
+        problems: problems,
+      );
 
   void dispose() => _http.close();
 }

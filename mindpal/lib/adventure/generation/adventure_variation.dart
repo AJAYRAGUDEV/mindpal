@@ -19,6 +19,7 @@
 /// complete, playable adventure rather than an adventure with holes in it.
 library;
 
+import '../content/festival_skin.dart';
 import '../content/pongal_adventure.dart';
 import '../model/adventure.dart';
 
@@ -165,10 +166,15 @@ Adventure applyVariation({
   Adventure base = kPongalAdventure,
   AdventureTextPack text = AdventureTextPack.empty,
   VariationPlan plan = VariationPlan.standard,
+  FestivalSkin? festival,
   AdventureSource source = AdventureSource.generated,
   DateTime? createdAt,
 }) {
-  String pick(String slot, String original) => text[slot] ?? original;
+  // Two layers, in this order: the festival decides what the adventure is
+  // about, then generated text rewords whatever the festival left. So asking
+  // for a new Bihu adventure rewords Bihu, not Pongal.
+  String pick(String slot, String original) =>
+      text[slot] ?? festival?.text[slot] ?? original;
 
   return Adventure(
     id: id,
@@ -178,9 +184,41 @@ Adventure applyVariation({
     intro: pick('intro', base.intro),
     objective: pick('objective', base.objective),
     startLocationId: base.startLocationId,
-    locations: base.locations,
-    items: base.items,
-    culturalNote: base.culturalNote,
+    culturalNote: festival?.culturalNote ?? base.culturalNote,
+
+    // Names and pictures only. Prices, ids and everything mechanical come
+    // straight from the skeleton, so the budget proof and the soft-lock guard
+    // hold for every festival without being re-established.
+    items: [
+      for (final item in base.items)
+        if (festival?.itemLabels[item.id] case final label?)
+          AdventureItem(
+            id: item.id,
+            price: item.price,
+            color: item.color,
+            name: label.name,
+            description: label.description,
+            icon: label.icon,
+          )
+        else
+          item,
+    ],
+
+    locations: [
+      for (final place in base.locations)
+        if (festival?.locationLabels[place.id] case final label?)
+          AdventureLocation(
+            id: place.id,
+            hotspots: place.hotspots,
+            skyColor: place.skyColor,
+            groundColor: place.groundColor,
+            visitFlag: place.visitFlag,
+            name: label.name,
+            description: label.description,
+          )
+        else
+          place,
+    ],
 
     characters: [
       for (final person in base.characters)
@@ -238,7 +276,7 @@ Adventure applyVariation({
         for (final stall in base.market.stalls)
           MarketStall(
             id: stall.id,
-            name: stall.name,
+            name: festival?.stallNames[stall.id] ?? stall.name,
             icon: stall.icon,
             color: stall.color,
             itemIds: stall.itemIds,
@@ -277,13 +315,42 @@ Adventure applyVariation({
           Clue(
             id: clue.id,
             icon: clue.icon,
-            source: clue.source,
+            source: festival?.clueSources[clue.id] ?? clue.source,
             text: pick('clue.${clue.id}.text', clue.text),
           ),
       ],
     ),
 
-    preparation: base.preparation,
+    preparation: PreparationConfig(
+      readyFlag: base.preparation.readyFlag,
+      slots: [
+        for (final slot in base.preparation.slots)
+          if (festival?.slotLabels[slot.id] case final label?)
+            PreparationSlot(
+              id: slot.id,
+              acceptedItemIds: slot.acceptedItemIds,
+              x: slot.x,
+              y: slot.y,
+              label: label.label,
+              filledText: label.filledText,
+            )
+          else
+            slot,
+      ],
+      styles: [
+        for (final style in base.preparation.styles)
+          if (festival?.styleLabels[style.id] case final label?)
+            DecorationStyle(
+              id: style.id,
+              color: style.color,
+              icon: style.icon,
+              name: label.name,
+              description: label.description,
+            )
+          else
+            style,
+      ],
+    ),
 
     quests: [
       for (final step in base.quests)

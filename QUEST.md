@@ -64,6 +64,53 @@ server/src/adventure/variation.js      The Gemini prompt, retries and sanitiser
 
 ---
 
+## Festivals
+
+Every adventure begins by asking which festival it should be about.
+
+| | Pongal | Bohag Bihu |
+|---|---|---|
+| Where | Tamil Nadu | Assam |
+| The feast | Rice boiled with milk and jaggery until the pot goes over | Pitha steamed over water |
+| The decoration that goes missing | The kolam stencil | The japi |
+| What you give | — | A gamosa to the elders |
+| The cattle | — | Goru Bihu: washed, turmeric, bells |
+
+A festival is a **skin**: it changes every word and every picture, and **nothing
+mechanical**. Prices, coin totals, requirements, effects, clue relationships, the
+mystery's answer and the ending conditions all come from one skeleton and are
+copied through untouched. That is why the budget proof, the soft-lock guard and
+the solver's finding that both endings are reachable carry over to a new festival
+without being re-established — and the tests run the full validator over every
+festival anyway.
+
+Adding a third is one `FestivalSkin` in `content/festivals.dart` and one line in
+`kFestivals`. No code, no screens.
+
+**A test reads everything a player can see in the Bihu adventure and fails if the
+word "Pongal", "kolam", "sugarcane", "stencil" or any Pongal character name
+survives** — because a mistyped slot name does not fail to compile, it silently
+leaves one festival's line in the middle of the other's story.
+
+Only festivals with written content appear in the chooser. What is missing is
+said in words rather than shown as a greyed-out row.
+
+---
+
+## The reading voice
+
+**Extras → The reading voice** lists the voices the phone actually has for the
+current language, each with a **Try it** button — an engine voice name like
+`ta-in-x-tac-network` tells nobody anything, so the only way to choose is to
+hear it. Offline voices are listed first and labelled; one that needs the
+internet says so, because it will simply stay quiet on a bus.
+
+Where the phone offers only one voice, or none, the screen says that instead of
+showing an empty list. The chosen voice reads the adventure, the games and the
+assistant.
+
+---
+
 ## How the AI is used, and what it cannot do
 
 **Gemini writes words. It does not write rules.**
@@ -193,7 +240,7 @@ and broken.
 
 | Destination | What it holds |
 |---|---|
-| **Festival Quest** | Start, Continue, Saved Adventures |
+| **Festival Quest** | Start (choose a festival), Continue, Saved Adventures |
 | **Quick Games** | Cultural Memory Match, Story Order, Cultural Odd-One-Out, Family Photo Match, Memory Moment, Sequence Recall |
 | **My Progress** | Adventures finished, endings discovered, and a link to the quick-game record |
 | **Extras** | Reminders, Memory Vault, the assistant, profile and caregiver linking |
@@ -223,6 +270,10 @@ adventure mentions a caregiver, a code or a sign-in.
    can check it — so a wrong answer would be undetectable. Widening this means
    hand-writing a second mystery configuration and checking it with the solver,
    not asking the model for one.
+5. **Two festivals share one plot.** Nirmali stands where Ammal stands and wants
+   the same five things in the same order. That is what makes a festival cheap
+   and safe to add — but a genuinely different story needs a different skeleton,
+   not a different skin.
 5. **Generation is untested against the live model.** The sanitiser, the retry
    loop, the fallbacks and the validation are all tested; a real Gemini response
    is not, because that needs a key and a network.
@@ -232,8 +283,8 @@ adventure mentions a caregiver, a code or a sign-in.
 ## Tests
 
 ```bash
-cd mindpal && flutter analyze && flutter test   # 492 tests
-cd server && npm test                           # 58 tests
+cd mindpal && flutter analyze && flutter test   # 512 tests
+cd server && npm test                           # 61 tests
 ```
 
 * `test/adventure_engine_test.dart` — the rules: money, the sold-out
@@ -247,4 +298,7 @@ cd server && npm test                           # 58 tests
   market, the journal, the mystery, tap-to-place, the ending, and saving
 * `test/widget_test.dart` — the four destinations, Extras, and that playing is
   never gated on a caregiver
-* `server/test/adventure.test.js` — what the server will and will not pass on
+* `test/festival_test.dart` — every festival validates and solves, the
+  mechanics are identical to the skeleton, and no Pongal word survives into Bihu
+* `server/test/adventure.test.js` — what the server will and will not pass on,
+  including a value that leaks an internal id

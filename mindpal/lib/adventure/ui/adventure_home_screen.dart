@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import '../../services/voice/voice_controller.dart';
 import '../../theme/app_sizes.dart';
 import '../../theme/app_theme.dart';
+import '../content/festival_skin.dart';
+import '../content/festivals.dart';
 import '../engine/adventure_state.dart';
 import '../model/adventure.dart';
 import '../storage/adventure_store.dart';
 import 'adventure_intro_screen.dart';
 import 'adventure_library_screens.dart';
 import 'adventure_screen.dart';
+import 'festival_chooser_screen.dart';
 
 /// The front door of Festival Quest.
 ///
@@ -40,7 +43,11 @@ class AdventureHomeScreen extends StatefulWidget {
 
   /// Makes a new adventure with Gemini. Null when no backend is configured,
   /// in which case the button is absent rather than present and broken.
-  final Future<Adventure?> Function(BuildContext context)? onGenerate;
+  final Future<Adventure?> Function(
+    BuildContext context,
+    FestivalChoice choice,
+  )?
+  onGenerate;
 
   @override
   State<AdventureHomeScreen> createState() => _AdventureHomeScreenState();
@@ -48,6 +55,28 @@ class AdventureHomeScreen extends StatefulWidget {
 
 class _AdventureHomeScreenState extends State<AdventureHomeScreen> {
   AdventurePace _pace = AdventurePace.relaxed;
+
+  /// Remembered between adventures, so somebody who always plays Bihu is not
+  /// asked to find it again every time.
+  FestivalSkin _festival = kFestivals.first;
+
+  /// Asks which festival, and returns null if they backed out.
+  Future<FestivalChoice?> _askFestival({
+    required String title,
+    bool askForMood = false,
+  }) async {
+    final choice = await Navigator.of(context).push<FestivalChoice>(
+      MaterialPageRoute(
+        builder: (_) => FestivalChooserScreen(
+          title: title,
+          selected: _festival,
+          askForMood: askForMood,
+        ),
+      ),
+    );
+    if (choice != null && mounted) setState(() => _festival = choice.festival);
+    return choice;
+  }
 
   ({Adventure adventure, AdventureState state})? get _current =>
       widget.store.current();
@@ -83,6 +112,13 @@ class _AdventureHomeScreenState extends State<AdventureHomeScreen> {
     if (mounted) setState(() {});
   }
 
+  /// Choose a festival, then play its adventure from the beginning.
+  Future<void> _startChosen() async {
+    final choice = await _askFestival(title: 'Choose a festival');
+    if (choice == null || !mounted) return;
+    await _play(adventureForFestival(choice.festival));
+  }
+
   Future<void> _openSaved() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -99,7 +135,13 @@ class _AdventureHomeScreenState extends State<AdventureHomeScreen> {
     final make = widget.onGenerate;
     if (make == null) return;
 
-    final adventure = await make(context);
+    final choice = await _askFestival(
+      title: 'What shall I write about?',
+      askForMood: true,
+    );
+    if (choice == null || !mounted) return;
+
+    final adventure = await make(context, choice);
     if (adventure == null || !mounted) return;
 
     await widget.store.saveAdventure(adventure);
@@ -143,11 +185,10 @@ class _AdventureHomeScreenState extends State<AdventureHomeScreen> {
         _BigAction(
           icon: Icons.explore_rounded,
           title: 'Start Adventure',
-          detail: current == null
-              ? library.first.title
-              : 'Begin ${library.first.title} again from the start',
+          detail: 'Choose a festival — '
+              '${kFestivals.map((f) => f.name).join(' or ')}',
           color: AppColors.activity,
-          onTap: () => _play(library.first),
+          onTap: _startChosen,
         ),
 
         const SizedBox(height: AppSizes.gap),

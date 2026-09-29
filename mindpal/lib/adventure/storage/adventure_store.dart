@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../storage/local_storage.dart';
-import '../content/pongal_adventure.dart';
+import '../content/festivals.dart';
 import '../engine/adventure_state.dart';
 import '../model/adventure.dart';
 
@@ -100,15 +100,22 @@ class AdventureStore {
   /// rather than left to grow for ever.
   static const int _maxSaved = 6;
 
-  /// Every adventure that can be played right now: the bundled one first,
-  /// then whatever has been generated and saved, newest first.
+  /// Every adventure that can be played right now: one per festival, then
+  /// whatever has been generated and saved, newest first.
   ///
-  /// The bundled adventure is always present and always playable, which is what
+  /// The bundled ones are always present and always playable, which is what
   /// makes "offline" a promise rather than a hope.
-  List<Adventure> library() => [kPongalAdventure, ..._savedAdventures()];
+  List<Adventure> library() => [
+    for (final festival in kFestivals) adventureForFestival(festival),
+    ..._savedAdventures(),
+  ];
 
   Adventure? byId(String id) {
-    if (id == kPongalAdventure.id) return kPongalAdventure;
+    for (final festival in kFestivals) {
+      if (festivalAdventureId(festival) == id) {
+        return adventureForFestival(festival);
+      }
+    }
     return _savedAdventures().where((a) => a.id == id).firstOrNull;
   }
 

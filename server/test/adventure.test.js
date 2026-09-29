@@ -88,6 +88,42 @@ describe('sanitising generated adventure text', () => {
     }
   });
 
+  it('drops a value that leaks an internal id', () => {
+    // The prompt asks for ordinary names and the model usually obliges.
+    // "Usually" is not good enough when the alternative is a player reading
+    // "he will tell you that palm_sugar will do nicely instead".
+    const { text, rejected } = sanitise(
+      {
+        title: 'Fine',
+        intro: 'He will suggest palm_sugar instead.',
+      },
+      slots,
+      ['jaggery', 'palm_sugar', 'clay_pot'],
+    );
+
+    assert.equal(text.title, 'Fine');
+    assert.equal(text.intro, undefined, 'the leaked id is dropped');
+    assert.match(rejected[0], /internal id "palm_sugar"/);
+  });
+
+  it('does not reject an ordinary word that happens to be an id', () => {
+    // "jaggery" has no underscore and is a real English word, so it must not
+    // be treated as an internal id — glossing gur as jaggery is correct.
+    const { text, rejected } = sanitise(
+      { intro: 'Dark cane jaggery, in a round cake.' },
+      slots,
+      ['jaggery', 'palm_sugar'],
+    );
+
+    assert.equal(text.intro, 'Dark cane jaggery, in a round cake.');
+    assert.deepEqual(rejected, []);
+  });
+
+  it('works with no forbidden list at all', () => {
+    const { text } = sanitise({ title: 'Still fine' }, slots);
+    assert.equal(text.title, 'Still fine');
+  });
+
   it('accepts a full house', () => {
     const full = Object.fromEntries(slots.map((slot) => [slot, 'Some words.']));
     const { text, rejected } = sanitise(full, slots);

@@ -159,10 +159,41 @@ void main() {
     await tester.tap(find.text('Start Adventure'));
     await tester.pumpAndSettle();
 
+    // First it asks which festival. Both are real, written content.
+    expect(find.text('Choose a festival'), findsWidgets);
+    expect(find.text('Pongal'), findsOneWidget);
+    expect(find.text('Bohag Bihu'), findsOneWidget);
+    expect(find.text('Assam'), findsOneWidget);
+    // And it says what is NOT there rather than showing empty rows.
+    expect(
+      find.textContaining('Only these two are written so far'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Go on'));
+    await tester.pumpAndSettle();
+
     // The introduction says, before anything else, that the story is made up.
     expect(find.text('This story is made up'), findsOneWidget);
     await _scrollTo(tester, find.text('Begin the adventure'));
     expect(find.text('Begin the adventure'), findsOneWidget);
+  });
+
+  testWidgets('choosing Bohag Bihu gives a Bihu adventure', (tester) async {
+    await _pumpApp(tester, InMemoryStorage());
+
+    await tester.tap(find.text('Start Adventure'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bohag Bihu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Go on'));
+    await tester.pumpAndSettle();
+
+    // The whole story is the other festival, not Pongal with a new label.
+    expect(find.text('The Japi Above the Door'), findsOneWidget);
+    expect(find.textContaining('Bohag Bihu'), findsWidgets);
+    expect(find.textContaining('Goru Bihu'), findsOneWidget);
+    expect(find.textContaining('Pongal'), findsNothing);
   });
 
   testWidgets('saving the profile updates the name shown in Extras', (

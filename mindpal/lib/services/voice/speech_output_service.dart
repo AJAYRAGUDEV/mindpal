@@ -9,6 +9,41 @@ import '../voice_service.dart';
 /// What the speaker is doing, for the Play / Pause / Stop controls.
 enum SpeakingState { idle, speaking, paused }
 
+/// One voice the device can speak with.
+///
+/// Voices belong to the device, not to this app: what is on offer depends on
+/// what the person has installed, so this is always read from the engine and
+/// never assumed. Two phones will not show the same list.
+class DeviceVoice {
+  const DeviceVoice({required this.name, required this.locale});
+
+  /// The engine's own identifier, e.g. "en-in-x-ene-local". Ugly, and not
+  /// shown to anybody — see [label].
+  final String name;
+
+  final String locale;
+
+  /// Something a person can choose between.
+  ///
+  /// Engine voice names are not written for humans. Rather than print
+  /// "ta-in-x-tac-network" this pulls out what actually differs between the
+  /// voices on offer: the locale, and whether it needs the network.
+  String get label {
+    final needsNetwork = name.contains('network');
+    final quality = needsNetwork ? 'online' : 'on this phone';
+    return '$locale, $quality';
+  }
+
+  bool get isOffline => !name.contains('network');
+
+  @override
+  bool operator ==(Object other) =>
+      other is DeviceVoice && other.name == name && other.locale == locale;
+
+  @override
+  int get hashCode => Object.hash(name, locale);
+}
+
 /// Reading answers aloud through the device's own voices.
 ///
 /// As with recognition, the voices belong to the device, not to this app: an
@@ -31,6 +66,13 @@ class DeviceSpeechOutput implements TextToSpeechService {
 
   /// Lower-cased language tags the engine reports it can speak.
   List<String> _engineLanguages = const [];
+
+  /// Every voice the engine offers, whatever the language.
+  List<DeviceVoice> _voices = const [];
+
+  /// The voice the person picked, or null for whatever the engine defaults to.
+  DeviceVoice? _chosen;
+  DeviceVoice? get chosenVoice => _chosen;
 
   SpeakingState _state = SpeakingState.idle;
   SpeakingState get state => _state;
@@ -61,6 +103,25 @@ class DeviceSpeechOutput implements TextToSpeechService {
         if (languages is List)
           for (final language in languages) '$language'.toLowerCase(),
       ];
+
+      // The voices themselves, so the person can pick one. A device with no
+      // voice list still speaks — it simply offers no choice.
+      try {
+        final voices = await _tts.getVoices;
+        _voices = [
+          if (voices is List)
+            for (final voice in voices)
+              if (voice is Map &&
+                  voice['name'] is String &&
+                  voice['locale'] is String)
+                DeviceVoice(
+                  name: voice['name'] as String,
+                  locale: voice['locale'] as String,
+                ),
+        ];
+      } catch (error) {
+        debugPrint('TTS: could not list voices: ${error.runtimeType}');
+      }
 
       // Slower than default. These answers are read by someone who may be
       // hard of hearing and is not in a hurry.
@@ -95,6 +156,40 @@ class DeviceSpeechOutput implements TextToSpeechService {
   void _setState(SpeakingState state) {
     _state = state;
     if (!_stateController.isClosed) _stateController.add(state);
+  }
+
+  /// The voices that can read [language], for the chooser.
+  ///
+  /// Matched on the locale the same two ways as everything else here: the exact
+  /// tag first, then the language part alone, so "ta-IN" and "ta" both count as
+  /// Tamil.
+  List<DeviceVoice> voicesFor(AppLanguage language) {
+    final tag = language.speechLocaleTag;
+    if (tag == null) return const [];
+    final wanted = tag.toLowerCase().replaceAll('_', '-');
+    final base = wanted.split('-').first;
+
+    final matching = [
+      for (final voice in _voices)
+        if (voice.locale.toLowerCase().replaceAll('_', '-').split('-').first ==
+            base)
+          voice,
+    ];
+    // Offline voices first: they work where this app is meant to work.
+    matching.sort((a, b) {
+      if (a.isOffline != b.isOffline) return a.isOffline ? -1 : 1;
+      return a.locale.compareTo(b.locale);
+    });
+    return matching;
+  }
+
+  /// Uses a particular voice from now on, or null to go back to the default.
+  ///
+  /// Applied on the next [speak] rather than immediately, because setting a
+  /// voice mid-sentence is how you get half a sentence in each.
+  Future<void> useVoice(DeviceVoice? voice) async {
+    _chosen = voice;
+    await stop();
   }
 
   List<AppLanguage> supportedLanguages(List<AppLanguage> candidates) => [
@@ -146,6 +241,15 @@ class DeviceSpeechOutput implements TextToSpeechService {
 
     try {
       await _tts.setLanguage(tag);
+      // A chosen voice wins over the language default, but only when it can
+      // actually read this language — otherwise the words would come out in
+      // the wrong accent, or not at all.
+      final voice = _chosen;
+      if (voice != null &&
+          voice.locale.toLowerCase().split(RegExp('[-_]')).first ==
+              tag.toLowerCase().split(RegExp('[-_]')).first) {
+        await _tts.setVoice({'name': voice.name, 'locale': voice.locale});
+      }
       await _tts.speak(text);
     } catch (error) {
       debugPrint('TTS: speak failed: ${error.runtimeType}');

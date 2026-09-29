@@ -50,10 +50,10 @@ Rules you must follow:
 - Keep every name of a real object exactly as it is given to you (foods, tools,
   instruments, cloth). Those are real cultural objects and must not be renamed
   or invented.
-- People and the village are fictional. You may rename the PEOPLE. Use plausible
-  Tamil given names.
-- The story is set at Pongal, the Tamil harvest festival. Do not present the
-  story as a traditional tale or as folklore. Do not add festival "facts".
+- People and the village are fictional. You may rename the PEOPLE. Use given
+  names that suit the region you are told about, and no other region.
+- Do not present the story as a traditional tale or as folklore. Do not add
+  facts about the festival that were not already in the text you were given.
 
 Return only the JSON object. Every key must come from the list you were given.
 `.trim();
@@ -68,6 +68,8 @@ function buildPrompt({
   soldOutItemId,
   alternativeItemId,
   itemNames = {},
+  festival,
+  region,
   seed,
 }) {
   // Names, never ids. A prompt that says `palm_sugar` gets `palm_sugar` back in
@@ -76,6 +78,14 @@ function buildPrompt({
   const alternativeName = itemNames[alternativeItemId] ?? alternativeItemId;
 
   const lines = [
+    festival
+      ? `This adventure is set at ${festival}${region ? `, in ${region}` : ''}.`
+      : '',
+    festival
+      ? 'Keep it there. Names of people should suit that place, and nothing'
+      : '',
+    festival ? 'should be moved to a different festival or region.' : '',
+    festival ? '' : '',
     'Reword each slot below. The CURRENT TEXT is given after each slot name.',
     'Say the same thing in different words. Do not change what happens, who',
     'knows what, or what any line tells the player.',
@@ -100,9 +110,20 @@ function buildPrompt({
   return lines.join('\n');
 }
 
-/** Drops anything the app did not ask for, or that is the wrong shape. */
-export function sanitise(raw, allowedSlots) {
+/**
+ * Drops anything the app did not ask for, or that is the wrong shape.
+ *
+ * [forbidden] holds the internal ids of things — `palm_sugar`, `clue_basket`.
+ * A value containing one is dropped, because it would put a database key in
+ * front of a player. The prompt asks for ordinary names and the model usually
+ * obliges; "usually" is not a guarantee, and this is. A dropped value simply
+ * keeps its original wording.
+ */
+export function sanitise(raw, allowedSlots, forbidden = []) {
   const allowed = new Set(allowedSlots);
+  const ids = forbidden.filter(
+    (id) => typeof id === 'string' && id.includes('_'),
+  );
   const text = {};
   const rejected = [];
 
@@ -122,6 +143,11 @@ export function sanitise(raw, allowedSlots) {
     }
     if (trimmed.length > MAX_VALUE_LENGTH) {
       rejected.push(`${key}: too long (${trimmed.length})`);
+      continue;
+    }
+    const leaked = ids.find((id) => trimmed.includes(id));
+    if (leaked) {
+      rejected.push(`${key}: contains the internal id "${leaked}"`);
       continue;
     }
     text[key] = trimmed;
@@ -157,6 +183,8 @@ export async function generateAdventureText({
   soldOutItemId,
   alternativeItemId,
   itemNames = {},
+  festival,
+  region,
   seed,
   log = () => {},
 }) {
@@ -190,6 +218,8 @@ export async function generateAdventureText({
           soldOutItemId,
           alternativeItemId,
           itemNames,
+          festival,
+          region,
           seed,
         }),
         // No responseSchema: the key set is decided by the app and changes with
@@ -199,7 +229,7 @@ export async function generateAdventureText({
         log,
       });
 
-      const { text, rejected } = sanitise(data, slice);
+      const { text, rejected } = sanitise(data, slice, Object.keys(itemNames));
       const filled = coverage(text, slice);
       attempts.push(`try${attempt}:${model}/${Object.keys(text).length}slots`);
 

@@ -61,6 +61,9 @@ const Map<String, IconData> kAdventureIcons = {
   'basket': Icons.shopping_basket_rounded,
   'boards': Icons.dashboard_rounded,
   'bundle': Icons.inventory_2_rounded,
+  'cloth': Icons.checkroom_rounded,
+  'woven_hat': Icons.umbrella_rounded,
+  'curd': Icons.local_drink_rounded,
 
   // the mystery
   'clue': Icons.search_rounded,

@@ -107,6 +107,19 @@ class VoiceController extends ChangeNotifier {
   List<AppLanguage> speakableLanguages() =>
       _output.supportedLanguages(kAppLanguages);
 
+  /// The voices this device can read [language] with. Often empty, and that is
+  /// a fact about the phone rather than a fault.
+  List<DeviceVoice> voicesFor(AppLanguage language) =>
+      _output.voicesFor(language);
+
+  DeviceVoice? get chosenVoice => _output.chosenVoice;
+
+  /// Switches voice. Notifies, so a chooser can show the new selection.
+  Future<void> useVoice(DeviceVoice? voice) async {
+    await _output.useVoice(voice);
+    notifyListeners();
+  }
+
   Future<bool> canHear(AppLanguage language) =>
       _recognition.supportsLanguage(language);
 
