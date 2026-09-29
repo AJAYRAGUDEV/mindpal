@@ -4,8 +4,12 @@ import '../../l10n/app_strings.dart';
 import '../../l10n/language_scope.dart';
 import '../../models/difficulty.dart';
 import '../../models/game_result.dart';
+import '../../models/game_settings.dart';
+import '../../services/voice/voice_controller.dart';
 import '../../theme/app_sizes.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/game_feedback.dart';
+import '../widgets/game_shell.dart';
 import 'odd_one_out_game.dart';
 import 'odd_one_out_item.dart';
 
@@ -15,9 +19,28 @@ import 'odd_one_out_item.dart';
 /// large tiles, feedback, then a result. Three games that behave differently
 /// would be three things for the user to learn.
 class OddOneOutScreen extends StatefulWidget {
-  const OddOneOutScreen({super.key, required this.difficulty});
+  const OddOneOutScreen({
+    super.key,
+    required this.difficulty,
+    this.deck = OddOneOutDeck.everyday,
+    this.title,
+    this.notes = const [],
+    this.settings = GameSettings.defaults,
+    this.voice,
+  });
 
   final Difficulty difficulty;
+
+  /// Where the tiles come from. The everyday deck is the default, so the
+  /// original game is unchanged; a cultural pack passes its own.
+  final OddOneOutDeck deck;
+
+  /// Overrides the screen title, e.g. "Cultural Odd-One-Out".
+  final String? title;
+
+  final List<GameNote> notes;
+  final GameSettings settings;
+  final VoiceController? voice;
 
   @override
   State<OddOneOutScreen> createState() => _OddOneOutScreenState();
@@ -32,24 +55,44 @@ class _OddOneOutScreenState extends State<OddOneOutScreen> {
     super.initState();
     _game = OddOneOutGame(
       config: OddOneOutConfig.forDifficulty(widget.difficulty),
+      deck: widget.deck,
     );
   }
+
+  /// Whether the hint for THIS round is on screen. The count of hints used
+  /// lives in the game, so it survives moving to the next round.
+  bool _hintShown = false;
 
   void _restart() {
     setState(() {
       _game = OddOneOutGame(
         config: OddOneOutConfig.forDifficulty(widget.difficulty),
+        deck: widget.deck,
       );
       _showingResult = false;
+      _hintShown = false;
+    });
+  }
+
+  void _showHint() {
+    setState(() {
+      _hintShown = true;
+      _game.useHint();
     });
   }
 
   void _answer(int index) {
     if (_game.isAnswered) return;
+    final wasRight = index == _game.oddIndex;
+    wasRight ? GameFeedback(widget.settings).good()
+        : GameFeedback(widget.settings).notYet();
     setState(() => _game.answer(index));
   }
 
-  void _next() => setState(() => _game.next());
+  void _next() => setState(() {
+    _game.next();
+    _hintShown = false;
+  });
 
   void _showResult() => setState(() => _showingResult = true);
 
@@ -60,34 +103,39 @@ class _OddOneOutScreenState extends State<OddOneOutScreen> {
   Widget build(BuildContext context) {
     final strings = LanguageScope.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(strings.oddOneOut),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: strings.backToHome,
-          onPressed: _leaveWithResult,
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSizes.pagePadding),
-          child: _showingResult
-              ? _ResultView(
-                  game: _game,
-                  strings: strings,
-                  onPlayAgain: _restart,
-                  onBackHome: _leaveWithResult,
-                )
-              : _RoundView(
-                  game: _game,
-                  strings: strings,
-                  onAnswer: _answer,
-                  onNext: _next,
-                  onShowResult: _showResult,
-                ),
-        ),
-      ),
+    return GameShell(
+      title: widget.title ?? strings.oddOneOut,
+      instructions:
+          'Look at the pictures. Most of them belong together. Tap the one '
+          'that does not belong. There is no time limit.',
+      notes: [
+        ...widget.notes,
+        if (_game.boardWasReduced)
+          GameNote(
+            'This pack has enough pictures for ${_game.itemCount} tiles, so '
+            'the board is that size rather than ${_game.config.itemCount}.',
+          ),
+      ],
+      settings: widget.settings,
+      voice: widget.voice,
+      onExit: _leaveWithResult,
+      onRestart: _restart,
+      child: _showingResult
+          ? _ResultView(
+              game: _game,
+              strings: strings,
+              onPlayAgain: _restart,
+              onBackHome: _leaveWithResult,
+            )
+          : _RoundView(
+              game: _game,
+              strings: strings,
+              hintShown: _hintShown,
+              onHint: _showHint,
+              onAnswer: _answer,
+              onNext: _next,
+              onShowResult: _showResult,
+            ),
     );
   }
 }
@@ -96,6 +144,8 @@ class _RoundView extends StatelessWidget {
   const _RoundView({
     required this.game,
     required this.strings,
+    required this.hintShown,
+    required this.onHint,
     required this.onAnswer,
     required this.onNext,
     required this.onShowResult,
@@ -103,49 +153,65 @@ class _RoundView extends StatelessWidget {
 
   final OddOneOutGame game;
   final AppStrings strings;
+  final bool hintShown;
+  final VoidCallback onHint;
   final ValueChanged<int> onAnswer;
   final VoidCallback onNext;
   final VoidCallback onShowResult;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _ProgressHeader(game: game, strings: strings),
-        const SizedBox(height: AppSizes.gap),
-
-        Text(
-          strings.whichIsDifferent,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: AppSizes.gap),
-
-        // The board fills whatever space is left, so it never scrolls.
-        Expanded(child: _Board(game: game, onAnswer: onAnswer)),
-
-        if (game.isAnswered) ...[
+    return GameBoardLayout(
+      header: Column(
+        children: [
+          _ProgressHeader(game: game, strings: strings),
           const SizedBox(height: AppSizes.gap),
-          _Feedback(game: game, strings: strings),
-          const SizedBox(height: AppSizes.gap),
-          FilledButton.icon(
-            onPressed: game.isLastRound ? onShowResult : onNext,
-            icon: Icon(
-              game.isLastRound
-                  ? Icons.emoji_events_rounded
-                  : Icons.arrow_forward_rounded,
-              size: AppSizes.iconMedium,
-            ),
-            label: Text(
-              game.isLastRound ? strings.seeResult : strings.nextQuestion,
+          Text(
+            strings.whichIsDifferent,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
           ),
+          if (!game.isAnswered) ...[
+            const SizedBox(height: AppSizes.gap),
+            hintShown
+                ? _HintCard(text: game.hint)
+                : OutlinedButton.icon(
+                    onPressed: onHint,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, AppSizes.minTouchTarget),
+                    ),
+                    icon: const Icon(Icons.help_outline_rounded, size: 26),
+                    label: const Text('Give me a hint'),
+                  ),
+          ] else ...[
+            // The explanation lives up here, with the rest of the scrolling
+            // text, so that however long it runs it can never push the
+            // Next question button off the screen.
+            const SizedBox(height: AppSizes.gap),
+            _Feedback(game: game, strings: strings),
+          ],
         ],
-      ],
+      ),
+      // The board fills whatever space is left, so it never scrolls.
+      board: _Board(game: game, onAnswer: onAnswer),
+      footer: game.isAnswered
+          ? FilledButton.icon(
+              onPressed: game.isLastRound ? onShowResult : onNext,
+              icon: Icon(
+                game.isLastRound
+                    ? Icons.emoji_events_rounded
+                    : Icons.arrow_forward_rounded,
+                size: AppSizes.iconMedium,
+              ),
+              label: Text(
+                game.isLastRound ? strings.seeResult : strings.nextQuestion,
+              ),
+            )
+          : null,
     );
   }
 }
@@ -198,8 +264,8 @@ class _Board extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const spacing = 12.0;
-    final columns = game.config.columns;
-    final rows = game.config.rows;
+    final columns = game.columns;
+    final rows = game.rows;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -279,7 +345,7 @@ class _ItemTile extends StatelessWidget {
       button: onTap != null,
       // The name is spoken, so a TalkBack user is not asked to identify an
       // unlabelled picture.
-      label: 'Item $position, ${item.label}',
+      label: 'Item $position, ${item.spokenLabel}',
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
@@ -386,9 +452,8 @@ class _Feedback extends StatelessWidget {
             // is not a thing at home" teaches the grouping; a red cross does
             // not.
             Text(
-              '${strings.theAnswerWas}: ${game.items[game.oddIndex].label}. '
-              '${game.oddCategory.label} — '
-              '${game.majorityCategory.label.toLowerCase()} everywhere else.',
+              '${strings.theAnswerWas}: ${game.oddItem.label}. '
+              '${game.explanation}',
               style: const TextStyle(
                 fontSize: 19,
                 color: AppColors.textPrimary,
@@ -481,6 +546,46 @@ class _ResultView extends StatelessWidget {
         ),
         const SizedBox(height: AppSizes.gapLarge),
       ],
+    );
+  }
+}
+
+/// The hint, once asked for. It names the rule, never the answer.
+class _HintCard extends StatelessWidget {
+  const _HintCard({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.lightbulb_outline_rounded,
+            size: 24,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: AppSizes.gapSmall),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 18,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

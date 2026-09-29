@@ -7,12 +7,52 @@ import 'package:flutter/material.dart';
 /// becomes more common with age. A player must never need to tell two cards
 /// apart by colour alone.
 class MemorySymbol {
-  const MemorySymbol(this.label, this.icon, this.color);
+  const MemorySymbol(
+    this.label,
+    this.icon,
+    this.color, {
+    this.matchKey,
+    this.fact,
+    this.description,
+    this.imageRef,
+  });
 
   /// Read out by TalkBack, and shown under the icon.
   final String label;
   final IconData icon;
   final Color color;
+
+  final String? matchKey;
+
+  /// What makes two cards a pair.
+  ///
+  /// Defaults to the label, which is what the original twelve symbols rely on.
+  /// The family-photo board must override it: two of the user's memories can
+  /// easily share a title ("Diwali"), and matching on the title would let two
+  /// different photos count as a pair.
+  String get pairKey => matchKey ?? label;
+
+  /// One short sentence shown AFTER this pair is found, never before — a fact
+  /// on the back of a hidden card would be a hint. Null when there is nothing
+  /// to say.
+  final String? fact;
+
+  /// A longer plain-language description for screen readers, when the label
+  /// alone is not enough ("Pitha" means nothing read out on its own).
+  final String? description;
+
+  /// A MediaStore key, for a board built from the user's own photos. Null for
+  /// every icon-based board. When it is set the tile shows the picture and
+  /// falls back to [icon] if the file has gone.
+  final String? imageRef;
+
+  bool get hasFact => fact != null && fact!.trim().isNotEmpty;
+  bool get hasImage => imageRef != null && imageRef!.isNotEmpty;
+
+  /// What TalkBack should say for this card: the name, plus the description
+  /// when there is one.
+  String get spokenLabel =>
+      description == null ? label : '$label. $description';
 }
 
 /// The pool the game draws from. Everyday objects, not abstract shapes —

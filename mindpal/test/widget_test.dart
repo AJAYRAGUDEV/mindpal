@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mindpal/app.dart';
 import 'package:mindpal/services/ai_service.dart';
 import 'package:mindpal/services/game_history_service.dart';
+import 'package:mindpal/services/game_settings_service.dart';
 import 'package:mindpal/services/language_service.dart';
 import 'package:mindpal/services/memory_aid_service.dart';
 import 'package:mindpal/services/memory_vault_service.dart';
@@ -36,6 +37,7 @@ Future<void> _pumpApp(WidgetTester tester, InMemoryStorage storage) async {
       memoryAidService: MemoryAidService(storage),
       memoryVaultService: MemoryVaultService(storage, media: InMemoryMediaStore()),
       gameHistoryService: GameHistoryService(storage),
+      gameSettingsService: GameSettingsService(storage),
       languageService: LanguageService(storage),
       aiService: const DeterministicAiService(),
     ),
@@ -43,20 +45,52 @@ Future<void> _pumpApp(WidgetTester tester, InMemoryStorage storage) async {
   await tester.pumpAndSettle();
 }
 
+/// Scrolls Home until [finder] is on screen.
+///
+/// Home is a ListView, and a ListView does not build children below the
+/// viewport at all — so something that exists but is further down cannot be
+/// found without scrolling to it. This is not a workaround for a bug; it is how
+/// a long list behaves.
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(finder, 240, maxScrolls: 30);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  testWidgets('app starts on the Elder Mode home', (tester) async {
+  testWidgets('home leads with games', (tester) async {
     await _pumpApp(tester, InMemoryStorage());
 
-    // The four large actions. These replaced the original overview cards when
-    // Home was rebuilt for Elder Mode.
+    // Play a game is the first action and is visible without scrolling: that
+    // is the whole point of the game-led ordering.
     expect(find.text('Play a game'), findsOneWidget);
+    expect(find.text('Games'), findsOneWidget);
+
+    // The games are named on Home with what they are and how hard they are set.
+    expect(find.text('Story Order'), findsOneWidget);
+    expect(find.text('Family Photo Match'), findsOneWidget);
+    expect(find.textContaining('Difficulty: Easy'), findsWidgets);
+
+    // Which pack the pictures come from, and a way to change it. It sits just
+    // below the four game rows, so on a phone-sized screen it needs scrolling
+    // to.
+    final packLine = find.textContaining('Assam: Bihu and everyday things');
+    await _scrollTo(tester, packLine);
+    expect(packLine, findsWidgets);
+    expect(find.text('Change'), findsOneWidget);
+  });
+
+  testWidgets('the other features are still reachable from home', (
+    tester,
+  ) async {
+    await _pumpApp(tester, InMemoryStorage());
+
+    // Below the games, in the smaller section — present, just no longer
+    // competing with Play a game for attention.
+    await _scrollTo(tester, find.text('Also here'));
     expect(find.text('My memories'), findsOneWidget);
     expect(find.text('My reminders'), findsOneWidget);
+    expect(find.text('People who help me'), findsOneWidget);
     expect(find.text('Memory Assistant'), findsOneWidget);
-
-    // And the two summary sections.
-    expect(find.text("Today's activity"), findsOneWidget);
-    expect(find.text('Upcoming'), findsOneWidget);
   });
 
   testWidgets('with nothing saved, home says so rather than showing zeros', (
@@ -64,8 +98,21 @@ void main() {
   ) async {
     await _pumpApp(tester, InMemoryStorage());
 
+    await _scrollTo(tester, find.text('No activity yet today'));
     expect(find.text('No activity yet today'), findsOneWidget);
+
+    await _scrollTo(tester, find.text('No reminders for today'));
     expect(find.text('No reminders for today'), findsOneWidget);
+  });
+
+  testWidgets('nothing played yet means no Continue playing card', (
+    tester,
+  ) async {
+    await _pumpApp(tester, InMemoryStorage());
+
+    // It appears only once there is something to continue. An empty
+    // "Continue playing" would be a button that leads nowhere.
+    expect(find.text('Continue playing'), findsNothing);
   });
 
   testWidgets('saving the profile updates the greeting on Home', (

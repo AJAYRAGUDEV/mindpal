@@ -34,12 +34,33 @@ enum TapResult {
 /// This separation — logic in one file, appearance in another — is the single
 /// most useful habit for keeping a growing app debuggable.
 class MemoryMatchGame {
-  MemoryMatchGame({required this.config, Random? random})
-    : _random = random ?? Random() {
+  MemoryMatchGame({
+    required this.config,
+    List<MemorySymbol>? pool,
+    this.packId,
+    Random? random,
+  }) : _pool = pool ?? kMemorySymbols,
+       _random = random ?? Random() {
     _dealCards();
   }
 
   final MemoryMatchConfig config;
+
+  /// The pictures this board draws from.
+  ///
+  /// Defaults to the app's own everyday symbols, so every existing caller and
+  /// test is unchanged. A cultural pack passes objects from one region, and the
+  /// family board passes the user's own photos. The RULES below do not change
+  /// between those three — which is the whole reason this is a parameter and
+  /// not three copies of the game.
+  final List<MemorySymbol> _pool;
+
+  /// Recorded in the result so progress can say which pack was played. Null
+  /// means the everyday pictures.
+  final String? packId;
+
+  /// The cards actually dealt, so a screen can show what is on the board.
+  List<MemorySymbol> get pool => _pool;
 
   /// Injectable so tests can pass `Random(42)` and get the same board every
   /// time. Real gameplay passes nothing and gets a genuinely shuffled board.
@@ -51,8 +72,21 @@ class MemoryMatchGame {
   int matches = 0;
   int mistakes = 0;
 
+  /// The symbol of the pair just found, so the screen can offer its fact.
+  /// Null before the first match.
+  MemorySymbol? lastMatched;
+
   DateTime? _startedAt;
   DateTime? _finishedAt;
+
+  /// Total time spent paused, and when the current pause began.
+  ///
+  /// Without this, pausing would still be charged as playing time. The score's
+  /// time penalty is capped and gentle, but "I stopped for ten minutes and it
+  /// cost me points" is exactly the kind of quiet unfairness that makes a game
+  /// feel hostile.
+  Duration _pausedTotal = Duration.zero;
+  DateTime? _pausedAt;
 
   MemoryCard? _firstPick;
   MemoryCard? _secondPick;
@@ -67,15 +101,45 @@ class MemoryMatchGame {
   /// user should be able to take their time getting settled.
   bool get hasStarted => _startedAt != null;
 
+  bool get isPaused => _pausedAt != null;
+
+  /// Playing time: wall-clock time since the first tap, less any time paused.
   Duration get elapsed {
     final start = _startedAt;
     if (start == null) return Duration.zero;
-    return (_finishedAt ?? DateTime.now()).difference(start);
+    final end = _finishedAt ?? DateTime.now();
+    final pausedNow = _pausedAt == null
+        ? Duration.zero
+        : end.difference(_pausedAt!);
+    final playing = end.difference(start) - _pausedTotal - pausedNow;
+    return playing.isNegative ? Duration.zero : playing;
+  }
+
+  void pause() {
+    if (_finishedAt != null || _startedAt == null || isPaused) return;
+    _pausedAt = DateTime.now();
+  }
+
+  void resume() {
+    final since = _pausedAt;
+    if (since == null) return;
+    _pausedTotal += DateTime.now().difference(since);
+    _pausedAt = null;
   }
 
   void _dealCards() {
     // Pick `pairCount` distinct symbols from the pool, in random order.
-    final pool = List<MemorySymbol>.from(kMemorySymbols)..shuffle(_random);
+    //
+    // `take` stops early if the pool is smaller than the board asks for, which
+    // would silently deal a short board. Callers must check the pool size
+    // first (CulturalPack.canFillMatchBoard, and the family game's minimum),
+    // and this assert turns a silent short board into a loud failure in debug.
+    assert(
+      _pool.length >= config.pairCount,
+      'Board needs ${config.pairCount} pictures but the pool has '
+      '${_pool.length}.',
+    );
+    final pool = List<MemorySymbol>.from(_pool)..shuffle(_random);
     final chosen = pool.take(config.pairCount);
 
     var nextId = 0;
@@ -105,11 +169,13 @@ class MemoryMatchGame {
 
     moves++;
 
-    // Same symbol object, but compared by label so the check stays obvious.
-    if (_firstPick!.symbol.label == card.symbol.label) {
+    // Compared by pairKey, not by object identity: the two cards of a pair are
+    // separate MemoryCard objects that share one symbol.
+    if (_firstPick!.symbol.pairKey == card.symbol.pairKey) {
       _firstPick!.isMatched = true;
       card.isMatched = true;
       matches++;
+      lastMatched = card.symbol;
       _firstPick = null;
       _secondPick = null; // board is immediately playable again
       if (isComplete) _finishedAt = DateTime.now();
@@ -153,13 +219,20 @@ class MemoryMatchGame {
   }
 
   /// Package the finished game into the shared model that every game returns.
-  GameResult toResult() => GameResult(
-    gameType: GameType.memoryMatch,
+  ///
+  /// [gameType] is a parameter because the family-photo board is the same rules
+  /// on different pictures: it must be filed under its own name in progress, so
+  /// a caregiver can see "Family Photo Match" rather than a second row of
+  /// "Memory Match" they cannot tell apart.
+  GameResult toResult({GameType gameType = GameType.memoryMatch}) => GameResult(
+    gameType: gameType,
     difficulty: config.difficulty,
     score: score,
     durationSeconds: elapsed.inSeconds,
     completed: isComplete,
     mistakes: mistakes,
     playedAt: DateTime.now(),
+    packId: packId,
+    correct: matches,
   );
 }

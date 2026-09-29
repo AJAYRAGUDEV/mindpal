@@ -12,6 +12,7 @@ import 'services/memory_vault_service.dart';
 import 'models/reminder.dart';
 import 'services/notification_service.dart';
 import 'services/care/care_sync_service.dart';
+import 'services/game_settings_service.dart';
 import 'services/voice/voice_controller.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
@@ -31,6 +32,7 @@ class MindPalApp extends StatefulWidget {
     this.notificationService = const _NoNotifications(),
     required this.memoryAidService,
     required this.memoryVaultService,
+    required this.gameSettingsService,
     required this.gameHistoryService,
     required this.aiService,
     required this.languageService,
@@ -50,6 +52,10 @@ class MindPalApp extends StatefulWidget {
 
   final MemoryAidService memoryAidService;
   final MemoryVaultService memoryVaultService;
+
+  /// Sound, movement and reading-aloud choices for the games.
+  final GameSettingsService gameSettingsService;
+
   final GameHistoryService gameHistoryService;
   final AiService aiService;
   final LanguageService languageService;
@@ -111,6 +117,7 @@ class _MindPalAppState extends State<MindPalApp> {
           notificationService: widget.notificationService,
           memoryAidService: widget.memoryAidService,
           memoryVaultService: widget.memoryVaultService,
+          gameSettingsService: widget.gameSettingsService,
           voice: widget.voice,
           careSync: widget.careSync,
           gameHistoryService: widget.gameHistoryService,

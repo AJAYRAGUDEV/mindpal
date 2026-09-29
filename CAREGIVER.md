@@ -104,6 +104,30 @@ maps to, so `ReminderService.update` cancels the old alarm before scheduling
 the new one and the id never changes. Syncing twice with no server changes
 does nothing at all — there is a test named for exactly that.
 
+### Game activity now reaches the dashboard
+
+A finished game is reported to `POST /api/care/device/activity` and shows under
+**Recent activity** — for a caregiver granted `can_view_activity`, which the
+server enforces on the read.
+
+One predictable sentence per game, built in a single place
+(`CareSyncService.reportGameActivity`):
+
+```
+Finished Cultural Memory Match (Assam: Bihu and everyday things) on Easy. 4 right, 1 missed.
+```
+
+**Nothing private travels with it**: no photo, no photo caption, no memory
+title, no vault content. Family Photo Match is built from the patient's own
+pictures, and a summary reading "matched Grandmother's funeral" would put a
+private caption on somebody else's screen. `care_sync_test.dart` asserts this.
+
+The dashboard shows **no score interpretation** — no stage, no trend, no
+comparison. See `GAMES.md`.
+
+Reporting fails silently: a game that was played must not produce an error
+because a courtesy report could not be filed, and nothing is queued for retry.
+
 ### Media upload is not built
 
 There is no schema, no endpoint and no storage for caregiver photo or video

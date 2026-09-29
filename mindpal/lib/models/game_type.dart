@@ -36,6 +36,18 @@ enum GameType {
     description: 'Questions made from your own saved memories.',
     icon: Icons.favorite_rounded,
     color: AppColors.primary,
+  ),
+  folkStorySequence(
+    label: 'Story Order',
+    description: 'Put the scenes of a short story in the right order.',
+    icon: Icons.auto_stories_rounded,
+    color: Color(0xFF6A1B9A),
+  ),
+  familyPhotoMatch(
+    label: 'Family Photo Match',
+    description: 'Match pairs made from your own photos.',
+    icon: Icons.photo_library_rounded,
+    color: Color(0xFFAD1457),
   );
 
   const GameType({

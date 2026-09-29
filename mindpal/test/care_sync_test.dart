@@ -46,12 +46,24 @@ class _FakeServer extends http.BaseClient {
   /// Queued responses, one per sync call.
   final List<String> responses = [];
   final List<String> requestedPaths = [];
+
+  /// Every request body sent, so a test can assert what left the device.
+  final List<String> sentBodies = [];
+
   String deviceKeySeen = '';
+
+  /// Makes the next request fail, for the "never reaches the player" test.
+  bool failNext = false;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     requestedPaths.add(request.url.path + (request.url.query.isEmpty ? '' : '?${request.url.query}'));
     deviceKeySeen = request.headers['x-device-key'] ?? '';
+    if (request is http.Request) sentBodies.add(request.body);
+    if (failNext) {
+      failNext = false;
+      return _json('{"error":"Something went wrong."}', 500);
+    }
 
     if (request.url.path.endsWith('/device/register')) {
       return _json('{"patientId":1,"deviceKey":"server-issued-key"}');
@@ -63,11 +75,12 @@ class _FakeServer extends http.BaseClient {
     return _json(body);
   }
 
-  http.StreamedResponse _json(String body) => http.StreamedResponse(
-    Stream.value(body.codeUnits),
-    200,
-    headers: {'content-type': 'application/json'},
-  );
+  http.StreamedResponse _json(String body, [int status = 200]) =>
+      http.StreamedResponse(
+        Stream.value(body.codeUnits),
+        status,
+        headers: {'content-type': 'application/json'},
+      );
 }
 
 String remoteReminder({
@@ -359,6 +372,107 @@ void main() {
       expect(list.single.title, 'Mine');
       expect(sync.isPaired, isFalse);
       expect(notifications.log.where((l) => l.startsWith('cancel')), hasLength(1));
+    });
+  });
+
+  group('reporting a game to the caregiver server', () {
+    test('an unpaired phone reports nothing at all', () async {
+      await sync.reportGameActivity(
+        gameLabel: 'Cultural Memory Match',
+        difficultyLabel: 'Easy',
+        completed: true,
+        correct: 4,
+        mistakes: 1,
+      );
+
+      // No pairing means no caregiver, so there is nobody to tell.
+      expect(server.requestedPaths, isEmpty);
+    });
+
+    test('a paired phone sends the game, the level and the counts', () async {
+      await sync.ensureDevice('Test patient');
+      server.requestedPaths.clear();
+      server.sentBodies.clear();
+
+      await sync.reportGameActivity(
+        gameLabel: 'Cultural Memory Match',
+        difficultyLabel: 'Easy',
+        packTitle: 'Assam: Bihu and everyday things',
+        completed: true,
+        correct: 4,
+        mistakes: 1,
+      );
+
+      expect(server.requestedPaths.single, endsWith('/device/activity'));
+      final body = server.sentBodies.single;
+      expect(body, contains('Cultural Memory Match'));
+      expect(body, contains('Easy'));
+      expect(body, contains('Assam'));
+      expect(body, contains('4 right'));
+      expect(body, contains('1 missed'));
+      expect(body, contains('"kind":"game"'));
+    });
+
+    test('an unfinished game is reported as started, not finished', () async {
+      await sync.ensureDevice('Test patient');
+      server.sentBodies.clear();
+
+      await sync.reportGameActivity(
+        gameLabel: 'Story Order',
+        difficultyLabel: 'Medium',
+        completed: false,
+        correct: 1,
+        mistakes: 3,
+      );
+
+      expect(server.sentBodies.single, contains('Started Story Order'));
+      expect(server.sentBodies.single, isNot(contains('Finished')));
+    });
+
+    test('nothing private goes with it', () async {
+      // The family board is built from private photos. What is reported must
+      // say only that it was played — never a photo caption, a memory title, a
+      // person's name, or a media reference.
+      await sync.ensureDevice('Test patient');
+      server.sentBodies.clear();
+
+      await sync.reportGameActivity(
+        gameLabel: 'Family Photo Match',
+        difficultyLabel: 'Easy',
+        completed: true,
+        correct: 3,
+        mistakes: 0,
+      );
+
+      final body = server.sentBodies.single;
+      expect(body, contains('Family Photo Match'));
+      for (final forbidden in ['photoRef', 'videoRef', 'vault_', 'imageRef']) {
+        expect(body, isNot(contains(forbidden)), reason: forbidden);
+      }
+      // The whole summary is one predictable sentence, with no free text from
+      // the user's own data anywhere in it.
+      expect(
+        body,
+        contains('Finished Family Photo Match on Easy. 3 right, 0 missed.'),
+      );
+    });
+
+    test('a server error never reaches the player', () async {
+      await sync.ensureDevice('Test patient');
+      server.failNext = true;
+
+      // A game that was played and enjoyed must not produce an error because a
+      // courtesy report could not be filed.
+      await expectLater(
+        sync.reportGameActivity(
+          gameLabel: 'Cultural Odd-One-Out',
+          difficultyLabel: 'Easy',
+          completed: true,
+          correct: 5,
+          mistakes: 0,
+        ),
+        completes,
+      );
     });
   });
 }

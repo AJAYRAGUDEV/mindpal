@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindpal/games/odd_one_out/odd_one_out_game.dart';
 import 'package:mindpal/games/odd_one_out/odd_one_out_item.dart';
@@ -75,10 +76,59 @@ void main() {
       }
     });
 
-    test('every item pool has enough pictures for the hardest board', () {
-      for (final category in ItemCategory.values) {
-        expect(itemsInCategory(category).length, greaterThanOrEqualTo(8));
+    test('the everyday deck can fill the hardest board', () {
+      const deck = OddOneOutDeck.everyday;
+
+      // ItemCategory now also holds the categories the cultural packs use, and
+      // the everyday pool has no items for those. A deck therefore reports the
+      // categories it can actually build a group from, and only those are
+      // checked here — which is exactly what the game draws from.
+      expect(deck.categories, hasLength(4));
+      for (final category in deck.categories) {
+        expect(deck.itemsIn(category).length, greaterThanOrEqualTo(8));
       }
+
+      // The real guarantee: Hard asks for nine tiles and gets nine.
+      final hard = OddOneOutConfig.forDifficulty(Difficulty.hard);
+      expect(deck.largestBoard, greaterThanOrEqualTo(hard.itemCount));
+      expect(_newGame(Difficulty.hard).boardWasReduced, isFalse);
+    });
+
+    test('a small deck shrinks the board instead of dealing a short one', () {
+      // Two categories, three items each: enough for a group of three plus one
+      // odd, and no more. Asking for nine must produce four, not a board
+      // quietly padded from somewhere else.
+      const small = OddOneOutDeck(
+        items: [
+          OddOneOutItem('Car', Icons.directions_car_rounded,
+              ItemCategory.vehicle),
+          OddOneOutItem('Bus', Icons.directions_bus_rounded,
+              ItemCategory.vehicle),
+          OddOneOutItem('Train', Icons.train_rounded, ItemCategory.vehicle),
+          OddOneOutItem('Cake', Icons.cake_rounded, ItemCategory.food),
+          OddOneOutItem('Egg', Icons.egg_rounded, ItemCategory.food),
+          OddOneOutItem('Rice', Icons.rice_bowl_rounded, ItemCategory.food),
+        ],
+      );
+
+      final game = OddOneOutGame(
+        config: OddOneOutConfig.forDifficulty(Difficulty.hard),
+        deck: small,
+        random: Random(7),
+      );
+
+      expect(small.largestBoard, 4);
+      expect(game.itemCount, 4);
+      expect(game.items, hasLength(4));
+      expect(game.boardWasReduced, isTrue);
+
+      // The rule still holds: exactly one tile is the odd one out.
+      final oddCategory = game.items[game.oddIndex].category;
+      final others = [
+        for (var i = 0; i < game.items.length; i++)
+          if (i != game.oddIndex) game.items[i].category,
+      ];
+      expect(others, everyElement(isNot(oddCategory)));
     });
   });
 

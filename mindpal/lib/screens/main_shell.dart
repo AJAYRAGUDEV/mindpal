@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../l10n/language_scope.dart';
+import '../content/pack_library.dart';
 import '../models/game_result.dart';
+import '../models/game_settings.dart';
 import '../models/reminder.dart';
 import '../models/user_profile.dart';
 import '../services/ai_service.dart';
 import '../services/game_history_service.dart';
+import '../services/game_settings_service.dart';
 import '../services/memory_aid_service.dart';
 import '../services/memory_vault_service.dart';
 import '../services/notification_service.dart';
@@ -69,6 +72,7 @@ class MainShell extends StatefulWidget {
     required this.notificationService,
     required this.memoryAidService,
     required this.memoryVaultService,
+    required this.gameSettingsService,
     this.voice,
     this.careSync,
     required this.gameHistoryService,
@@ -81,6 +85,7 @@ class MainShell extends StatefulWidget {
   final NotificationService notificationService;
   final MemoryAidService memoryAidService;
   final MemoryVaultService memoryVaultService;
+  final GameSettingsService gameSettingsService;
   final VoiceController? voice;
   final CareSyncService? careSync;
   final GameHistoryService gameHistoryService;
@@ -105,6 +110,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   /// Activity History — what was played and when. Never interpreted as any
   /// kind of cognitive assessment.
   List<GameResult> _gameHistory = const [];
+
+  /// Sound, movement, spoken instructions, level and chosen pack. Read
+  /// synchronously from storage, so games never open with the wrong settings
+  /// and then correct themselves a frame later.
+  GameSettings _gameSettings = GameSettings.defaults;
 
   bool _isLoading = true;
   String? _loadError;
@@ -187,6 +197,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     try {
       final profile = await widget.profileService.load();
+      final gameSettings = widget.gameSettingsService.load();
       final reminders = await widget.reminderService.loadAll();
       final history = await widget.gameHistoryService.loadAll();
       if (!mounted) return;
@@ -194,6 +205,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _profile = profile;
         _reminders = reminders;
         _gameHistory = history;
+        _gameSettings = gameSettings;
         _isLoading = false;
       });
 
@@ -446,8 +458,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   // ------------------------------------------------------- activity history
 
+  Future<void> _saveGameSettings(GameSettings settings) async {
+    setState(() => _gameSettings = settings);
+    await widget.gameSettingsService.save(settings);
+  }
+
   /// Called when a game screen pops with its result.
   Future<void> _recordGameResult(GameResult result) async {
+    // Local history first, and the caregiver report second. The record on the
+    // phone is the one that matters; the report is a courtesy that must never
+    // be the reason a played game goes unrecorded.
     try {
       final updated = await widget.gameHistoryService.record(
         _gameHistory,
@@ -455,6 +475,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       );
       if (!mounted) return;
       setState(() => _gameHistory = updated);
+
+      await widget.careSync?.reportGameActivity(
+        gameLabel: result.gameType.label,
+        difficultyLabel: result.difficulty.label,
+        packTitle: packById(result.packId)?.title,
+        completed: result.completed,
+        correct: result.correct,
+        mistakes: result.mistakes,
+        occurredAt: result.playedAt,
+      );
     } catch (_) {
       // A game that was played but could not be filed is not worth an error
       // dialog — the user has already had the experience.
@@ -520,14 +550,20 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         profile: _profile,
         reminders: _reminders,
         gameHistory: _gameHistory,
+        gameSettings: _gameSettings,
         onQuickAction: _openTab,
         onOpenAssistant: _openCompanion,
       ),
       MindPalScreen(
         onGameFinished: _recordGameResult,
         memoryAidService: widget.memoryAidService,
+        memoryVaultService: widget.memoryVaultService,
         onOpenMemoryAid: () => _openTab(AppTab.memory),
         aiService: widget.aiService,
+        gameHistory: _gameHistory,
+        settings: _gameSettings,
+        onSettingsChanged: _saveGameSettings,
+        voice: widget.voice,
       ),
       RemindersScreen(
         reminders: _reminders,

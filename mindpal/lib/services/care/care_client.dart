@@ -199,6 +199,29 @@ class CareClient {
     deviceKey: deviceKey,
   );
 
+  /// Tells the server the patient did something worth reporting.
+  ///
+  /// [summary] must already be a plain, non-private sentence. The server stores
+  /// it as given, and a caregiver with `can_view_activity` reads it back — so
+  /// anything private that reached this method would be visible to them. What
+  /// the app sends is built in one place, by
+  /// `CareSyncService.reportGameActivity`, precisely so that rule is checkable.
+  Future<void> reportActivity({
+    required String deviceKey,
+    required String kind,
+    required String summary,
+    DateTime? occurredAt,
+  }) => _send(
+    'POST',
+    '/api/care/device/activity',
+    body: {
+      'kind': kind,
+      'summary': summary,
+      'occurredAt': (occurredAt ?? DateTime.now()).toIso8601String(),
+    },
+    deviceKey: deviceKey,
+  );
+
   /// Everything that changed above [sinceRev].
   Future<SyncResult> sync({
     required String deviceKey,

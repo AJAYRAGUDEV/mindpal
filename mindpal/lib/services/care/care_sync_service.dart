@@ -114,6 +114,55 @@ class CareSyncService {
     return _client.listLinks(key);
   }
 
+  /// Reports one finished game to the server, for the activity summary a
+  /// caregiver sees.
+  ///
+  /// **What is sent, exactly.** The game's name, the level, the pack title, and
+  /// the plain counts. Nothing else. In particular: no photo, no photo caption,
+  /// no memory title, no vault content, and nothing from the family board
+  /// beyond the fact that it was played. That matters because Family Photo
+  /// Match is built from private pictures, and a summary reading "matched
+  /// Grandmother's funeral" would put a private caption on someone else's
+  /// screen.
+  ///
+  /// **What the caregiver actually sees.** Only a caregiver the patient granted
+  /// `can_view_activity` can read these back; the server enforces that on the
+  /// read, not here. So the honest description of this call is "the phone tells
+  /// the server", and consent decides who may look.
+  ///
+  /// Silent on failure, by design. Being offline is the normal case, and a game
+  /// that was played and enjoyed must not produce an error message because a
+  /// report could not be filed. Nothing is queued for retry: an activity note
+  /// that arrives four days late is worth less than the code to store it.
+  Future<void> reportGameActivity({
+    required String gameLabel,
+    required String difficultyLabel,
+    String? packTitle,
+    required bool completed,
+    required int correct,
+    required int mistakes,
+    DateTime? occurredAt,
+  }) async {
+    final key = deviceKey;
+    if (key == null || key.isEmpty || !_client.isConfigured) return;
+
+    final where = packTitle == null ? '' : ' ($packTitle)';
+    final summary =
+        '${completed ? "Finished" : "Started"} $gameLabel$where on '
+        '$difficultyLabel. $correct right, $mistakes missed.';
+
+    try {
+      await _client.reportActivity(
+        deviceKey: key,
+        kind: 'game',
+        summary: summary,
+        occurredAt: occurredAt,
+      );
+    } catch (_) {
+      // Deliberately swallowed. See the note above.
+    }
+  }
+
   /// Grants or withdraws one caregiver's permissions.
   Future<void> setPermissions({
     required int caregiverId,

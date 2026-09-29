@@ -17,6 +17,7 @@ import 'services/voice/voice_controller.dart';
 import 'services/profile_service.dart';
 import 'services/care/care_sync_service.dart';
 import 'services/reminder_service.dart';
+import 'services/game_settings_service.dart';
 import 'storage/local_storage.dart';
 import 'storage/shared_prefs_storage.dart';
 
@@ -143,6 +144,7 @@ Future<void> main() async {
       // bytes go in the platform media store (files on Android, IndexedDB in
       // the browser). The service opens that lazily on first use.
       memoryVaultService: MemoryVaultService(storage),
+      gameSettingsService: GameSettingsService(storage),
       gameHistoryService: GameHistoryService(storage),
       aiService: aiService,
       languageService: languageService,

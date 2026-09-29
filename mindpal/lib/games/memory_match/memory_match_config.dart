@@ -54,4 +54,23 @@ class MemoryMatchConfig {
 
   static MemoryMatchConfig forDifficulty(Difficulty difficulty) =>
       _table[difficulty]!;
+
+  /// A board of exactly [pairs] pairs, at this difficulty's scoring.
+  ///
+  /// Needed by the family-photo board, where the number of pairs is decided by
+  /// how many photos the player chose rather than by the difficulty. Rather
+  /// than refuse to start because someone has five photos and not eight, the
+  /// board is built the size their photos allow and the columns are widened to
+  /// match, so the cards stay as large as they can be.
+  ///
+  /// [pairs] is clamped to at least two — one pair is not a memory game.
+  static MemoryMatchConfig forPairs(Difficulty difficulty, int pairs) {
+    final count = pairs < 2 ? 2 : pairs;
+    return MemoryMatchConfig(
+      difficulty: difficulty,
+      pairCount: count,
+      columns: count <= 4 ? 2 : (count <= 6 ? 3 : 4),
+      difficultyBonus: _table[difficulty]!.difficultyBonus,
+    );
+  }
 }

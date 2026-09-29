@@ -56,13 +56,42 @@ class OddOneOutConfig {
 /// The rules of Odd-One-Out. Plain Dart, no Flutter — same as every other
 /// game in this project, so the whole thing is testable without a screen.
 class OddOneOutGame {
-  OddOneOutGame({required this.config, Random? random})
-    : _random = random ?? Random() {
+  OddOneOutGame({
+    required this.config,
+    this.deck = OddOneOutDeck.everyday,
+    Random? random,
+  }) : _random = random ?? Random() {
     startRound();
   }
 
   final OddOneOutConfig config;
+
+  /// Where the tiles come from. Defaults to the app's everyday pictures, so
+  /// every existing caller behaves exactly as before.
+  final OddOneOutDeck deck;
+
   final Random _random;
+
+  /// How many tiles this board really has.
+  ///
+  /// The difficulty asks for a number; a small cultural pack may not have
+  /// enough items of one kind to fill it. Dealing the biggest honest board and
+  /// telling the player beats padding the board with items from a third
+  /// category, which would destroy the "one clear rule" the game depends on.
+  int get itemCount {
+    final largest = deck.largestBoard;
+    if (largest <= 0) return config.itemCount;
+    return config.itemCount <= largest ? config.itemCount : largest;
+  }
+
+  /// True when the board had to be made smaller than the difficulty asked for.
+  /// The screen shows a plain note when this is set.
+  bool get boardWasReduced => itemCount < config.itemCount;
+
+  /// Kept in step with [itemCount] so the grid never has a ragged last row.
+  int get columns => itemCount <= 4 ? 2 : (itemCount <= 6 ? 2 : 3);
+
+  int get rows => (itemCount / columns).ceil();
 
   int round = 1;
   int correctCount = 0;
@@ -89,6 +118,40 @@ class OddOneOutGame {
 
   ItemCategory get oddCategory => items[oddIndex].category;
 
+  OddOneOutItem get oddItem => items[oddIndex];
+
+  /// Why that tile is the odd one, in one plain sentence.
+  ///
+  /// Built from the two category names rather than written per round, so it can
+  /// never drift out of step with the board it is explaining. Any item's own
+  /// fact is appended when it has one.
+  ///
+  /// "The others are musical instruments. Pitha is a food."
+  String get explanation {
+    final sentence =
+        'The others are all ${majorityCategory.many}. '
+        '${oddItem.label} is ${oddCategory.singular}.';
+    final fact = oddItem.fact;
+    return fact == null || fact.trim().isEmpty ? sentence : '$sentence $fact';
+  }
+
+  /// A nudge that names the rule without giving away the answer.
+  String get hint =>
+      'Most of these are ${majorityCategory.many}. Look for the one that '
+      'is not.';
+
+  int hintsUsed = 0;
+
+  /// Counted once per round at most, so tapping Hint repeatedly does not
+  /// inflate the number the difficulty suggestion reads.
+  bool _hintedThisRound = false;
+
+  void useHint() {
+    if (_hintedThisRound) return;
+    _hintedThisRound = true;
+    hintsUsed++;
+  }
+
   Duration get elapsed {
     final start = _startedAt;
     if (start == null) return Duration.zero;
@@ -100,17 +163,30 @@ class OddOneOutGame {
   void startRound() {
     _selectedIndex = null;
 
-    final categories = List<ItemCategory>.from(ItemCategory.values)
+    // A deck needs two categories to have a right answer at all: with one, the
+    // majority and the odd item would come from the same group and every tile
+    // would be equally correct. The hub will not offer the game for such a
+    // pack, and this turns the mistake into a clear failure rather than a board
+    // with no answer.
+    assert(
+      deck.isPlayable,
+      'Odd-One-Out needs at least two kinds with two items each; this deck has '
+      '${deck.categories.length}.',
+    );
+
+    // Only the categories this deck actually holds items for, so a board is
+    // never dealt short.
+    final categories = List<ItemCategory>.from(deck.categories)
       ..shuffle(_random);
     final majority = categories.first;
     final odd = categories.last; // guaranteed different: the list is shuffled
-    // and has four entries, so first and last are never the same object.
+    // and has at least two entries, so first and last are never the same.
 
-    final majorityPool = itemsInCategory(majority)..shuffle(_random);
-    final oddPool = itemsInCategory(odd)..shuffle(_random);
+    final majorityPool = deck.itemsIn(majority)..shuffle(_random);
+    final oddPool = deck.itemsIn(odd)..shuffle(_random);
 
     final board = <OddOneOutItem>[
-      ...majorityPool.take(config.itemCount - 1),
+      ...majorityPool.take(itemCount - 1),
       oddPool.first,
     ];
 
@@ -147,6 +223,7 @@ class OddOneOutGame {
   void next() {
     if (!isAnswered || isLastRound) return;
     round++;
+    _hintedThisRound = false;
     startRound();
   }
 
@@ -162,5 +239,8 @@ class OddOneOutGame {
     completed: isComplete,
     mistakes: mistakes,
     playedAt: DateTime.now(),
+    packId: deck.packId,
+    correct: correctCount,
+    hintsUsed: hintsUsed,
   );
 }
