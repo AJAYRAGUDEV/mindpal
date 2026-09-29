@@ -10,6 +10,7 @@ import { seedDemoData } from './caregiver/demo.js';
 import { RateLimiter, TtlCache } from './cache.js';
 import { config, isGeminiConfigured, redact } from './config.js';
 import { AiErrorCode, callGemini, GatewayError } from './gemini.js';
+import { generateAdventureText } from './adventure/variation.js';
 import { resolveLanguageUsed } from './languages.js';
 import {
   buildGamePrompt,
@@ -126,6 +127,103 @@ app.get('/api/health', (_request, response) => {
     model: config.model,
     fallbackModels: config.fallbackModels,
   });
+});
+
+/**
+ * The words for one Festival Quest adventure.
+ *
+ * The app sends the slot names it is willing to have rewritten and the short
+ * list of mechanical choices it will accept. Nothing about the game's rules
+ * comes back from here: this endpoint returns strings and one item id, and the
+ * app can only put them into the text slots of its own hand-written template.
+ *
+ * The app validates the finished adventure itself — structure and a full
+ * solve — before anybody plays it, and falls back to the bundled adventure if
+ * that fails. This endpoint failing is therefore never worse than an adventure
+ * the player has already got.
+ */
+app.post('/api/adventure', async (request, response) => {
+  const id = `#${++requestCounter}`;
+  const started = Date.now();
+  const log = (line) => console.log(`[adventure] ${id} ${line}`);
+
+  const { slots, soldOutOptions, currentText, seed } = request.body ?? {};
+
+  if (!Array.isArray(slots) || slots.length === 0) {
+    return response.status(400).json({
+      success: false,
+      code: 'bad_request',
+      error: 'Send the list of slots to fill.',
+    });
+  }
+
+  if (!limiter.tryConsume()) {
+    log('rejected: rate limit');
+    return response.status(429).json({
+      success: false,
+      code: AiErrorCode.rateLimited,
+      error: 'Too many requests just now. Please try again in a minute.',
+      retryable: true,
+    });
+  }
+
+  // Which thing has sold out is the ONE mechanical choice, and it is made here
+  // from the list the app sent — the app checks it again on the way in, because
+  // a client should not trust a server's word about its own rules either.
+  const options = Object.entries(soldOutOptions ?? {});
+  if (options.length === 0) {
+    return response.status(400).json({
+      success: false,
+      code: 'bad_request',
+      error: 'Send the sold-out options this app accepts.',
+    });
+  }
+  const [soldOutItemId, alternativeItemId] =
+    options[Math.floor(Math.random() * options.length)];
+
+  try {
+    const result = await generateAdventureText({
+      slots,
+      currentText: currentText ?? {},
+      soldOutItemId,
+      alternativeItemId,
+      seed: typeof seed === 'string' ? seed.slice(0, 40) : undefined,
+      log,
+    });
+
+    log(
+      `ok model=${result.model} slots=${Object.keys(result.text).length} ` +
+        `rejected=${result.rejected.length} ${Date.now() - started}ms`,
+    );
+
+    return response.json({
+      success: true,
+      soldOutItemId,
+      alternativeItemId,
+      text: result.text,
+      // Returned so a failure is diagnosable from the app's logs rather than
+      // only from the server's.
+      rejectedSlots: result.rejected.slice(0, 20),
+      model: result.model,
+    });
+  } catch (error) {
+    if (error instanceof GatewayError) {
+      log(`FAILED code=${error.code} ${Date.now() - started}ms`);
+      return response.status(error.httpStatus).json({
+        success: false,
+        code: error.code,
+        error: redact(error.message),
+        retryable: error.retryable,
+      });
+    }
+    console.error(`[adventure] ${id} unexpected failure:`, redact(String(error)));
+    return response.status(500).json({
+      success: false,
+      code: 'server_error',
+      error: 'The adventure writer hit an unexpected problem.',
+      retryable: true,
+    });
+  }
 });
 
 app.post('/api/ai', async (request, response) => {

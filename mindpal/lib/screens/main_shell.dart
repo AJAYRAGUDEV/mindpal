@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../l10n/language_scope.dart';
+import '../adventure/generation/adventure_generator.dart';
+import '../adventure/model/adventure.dart';
+import '../adventure/storage/adventure_store.dart';
+import '../adventure/ui/adventure_home_screen.dart';
+import '../adventure/ui/adventure_library_screens.dart';
 import '../content/pack_library.dart';
 import '../models/game_result.dart';
 import '../models/game_settings.dart';
@@ -23,7 +28,8 @@ import '../theme/app_sizes.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_exception.dart';
 import '../widgets/app_error_view.dart';
-import 'home_screen.dart';
+import 'extras_screen.dart';
+import 'games/player_progress_screen.dart';
 import 'companion/ai_companion_screen.dart';
 import 'memory/memory_hub_screen.dart';
 import 'mindpal_screen.dart';
@@ -38,25 +44,38 @@ import 'settings/notification_check_screen.dart';
 ///
 /// Home's quick actions need to say "open the Reminders tab". Naming the
 /// numbers here means no screen ever hard-codes a bare `2`.
+/// The four destinations, in the order the app now presents them.
+///
+/// Festival Quest leads, because playing is what MindPal is for. The older
+/// matching and sequencing games are still whole, one tap away under Quick
+/// Games. Reminders, the memory vault, the assistant and the caregiver tools
+/// have moved into Extras: they all still work, and **none of them is needed
+/// to play**.
 class AppTab {
   const AppTab._();
 
-  static const int home = 0;
-  static const int mindPal = 1;
-  static const int reminders = 2;
-  static const int memory = 3;
-  static const int profile = 4;
+  static const int adventure = 0;
+  static const int quickGames = 1;
+  static const int progress = 2;
+  static const int extras = 3;
 
-  /// Titles are no longer constants: they depend on the chosen language, so
-  /// they are looked up from the string table at build time instead.
+  /// Kept so older call sites that mean "the games" still read clearly.
+  static const int mindPal = quickGames;
+
   static List<String> titlesFor(AppStrings strings) => [
-    strings.titleHome,
-    strings.titleGames,
-    strings.titleReminders,
-    strings.titleMemory,
-    strings.titleProfile,
+    'Festival Quest',
+    'Quick Games',
+    'My Progress',
+    'Extras',
   ];
 }
+
+/// Which of the Extras is open, or null for the menu.
+///
+/// A sub-view rather than a pushed route, so these screens keep receiving the
+/// live reminder and profile state MainShell owns — pushing them would hand
+/// them a snapshot that never updates.
+enum ExtrasView { reminders, memories, profile }
 
 /// The frame that holds every screen.
 ///
@@ -73,6 +92,7 @@ class MainShell extends StatefulWidget {
     required this.memoryAidService,
     required this.memoryVaultService,
     required this.gameSettingsService,
+    required this.adventureStore,
     this.voice,
     this.careSync,
     required this.gameHistoryService,
@@ -86,6 +106,10 @@ class MainShell extends StatefulWidget {
   final MemoryAidService memoryAidService;
   final MemoryVaultService memoryVaultService;
   final GameSettingsService gameSettingsService;
+
+  /// Adventures, progress and finished runs, all on this device.
+  final AdventureStore adventureStore;
+
   final VoiceController? voice;
   final CareSyncService? careSync;
   final GameHistoryService gameHistoryService;
@@ -99,12 +123,18 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
-  int _currentIndex = AppTab.home;
+  int _currentIndex = AppTab.adventure;
+
+  /// Null means the Extras menu itself.
+  ExtrasView? _extrasView;
+
+  AdventureStore get _adventures => widget.adventureStore;
+  late final AdventureGenerator _generator = AdventureGenerator();
 
   UserProfile _profile = UserProfile.empty;
 
   /// The one copy of the reminder list in the whole app. Both RemindersScreen
-  /// and (from the next step) HomeScreen read it from here.
+  /// and the reminders screen inside Extras read it from here.
   List<Reminder> _reminders = const [];
 
   /// Activity History — what was played and when. Never interpreted as any
@@ -137,7 +167,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // A tap on a reminder notification while the app is running or in the
     // background lands here: go to the Reminders tab, where the reminder is.
     _notificationTaps = widget.notificationService.tapped.listen(
-      (_) => _openTab(AppTab.reminders),
+      (_) => _openExtras(ExtrasView.reminders),
     );
   }
 
@@ -145,8 +175,69 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _notificationTaps?.cancel();
+    _generator.dispose();
     super.dispose();
   }
+
+  /// Makes a new adventure, and says plainly when it could not.
+  ///
+  /// A refusal is never silent and never leaves the player with nothing: the
+  /// bundled adventure comes back instead, with the reason.
+  Future<Adventure?> _generateAdventure(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: AppSizes.gap),
+            Expanded(
+              child: Text(
+                'Writing you a new adventure...',
+                style: TextStyle(fontSize: 19),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final result = await _generator.generate();
+    if (!mounted) return null;
+    // `context` here is MainShell's own, and `mounted` above is MainShell's
+    // State. The dialog is dismissed through the root navigator because it was
+    // opened there.
+    if (!context.mounted) return null;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (result.isGenerated) return result.adventure;
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'A new adventure could not be made just now, so the one that comes '
+          'with MindPal is ready instead. (${result.problems.first})',
+          style: const TextStyle(fontSize: 17),
+        ),
+        duration: const Duration(seconds: 8),
+      ),
+    );
+    return null;
+  }
+
+  String? _extrasTitle(AppStrings strings) => switch (_extrasView) {
+    null => null,
+    ExtrasView.reminders => strings.titleReminders,
+    ExtrasView.memories => strings.titleMemory,
+    ExtrasView.profile => strings.titleProfile,
+  };
+
+  void _openExtras(ExtrasView? view) => setState(() {
+    _currentIndex = AppTab.extras;
+    _extrasView = view;
+  });
 
   /// Sync when the app returns to the foreground.
   ///
@@ -222,7 +313,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
       // Cold start from a notification tap: open on the Reminders tab.
       final launchedFrom = await widget.notificationService.launchReminderId();
-      if (launchedFrom != null && mounted) _openTab(AppTab.reminders);
+      if (launchedFrom != null && mounted) {
+        _openExtras(ExtrasView.reminders);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -240,7 +333,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     setState(() => _profile = profile);
   }
 
-  void _openTab(int index) => setState(() => _currentIndex = index);
+  void _openTab(int index) => setState(() {
+    _currentIndex = index;
+    if (index != AppTab.extras) _extrasView = null;
+  });
 
   // ------------------------------------------------------------- reminders
 
@@ -504,8 +600,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           reminders: _reminders,
           gameHistory: _gameHistory,
           onOpenGames: () => _openTab(AppTab.mindPal),
-          onOpenReminders: () => _openTab(AppTab.reminders),
-          onOpenMemoryAid: () => _openTab(AppTab.memory),
+          onOpenReminders: () => _openExtras(ExtrasView.reminders),
+          onOpenMemoryAid: () => _openExtras(ExtrasView.memories),
           voice: widget.voice,
         ),
       ),
@@ -546,47 +642,77 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     // IndexedStack builds all five screens once and keeps them alive, so
     // switching tabs never loses scroll position or half-typed text.
     final screens = [
-      HomeScreen(
-        profile: _profile,
-        reminders: _reminders,
-        gameHistory: _gameHistory,
-        gameSettings: _gameSettings,
-        onQuickAction: _openTab,
-        onOpenAssistant: _openCompanion,
+      AdventureHomeScreen(
+        store: _adventures,
+        voice: widget.voice,
+        reducedMotion: _gameSettings.reducedMotion,
+        onOpenQuickGames: () => _openTab(AppTab.quickGames),
+        onOpenProgress: () => _openTab(AppTab.progress),
+        // Absent rather than broken when no backend is configured: the button
+        // only appears if there is somewhere for it to ask.
+        onGenerate:
+            _generator.isConfigured ? _generateAdventure : null,
       ),
       MindPalScreen(
         onGameFinished: _recordGameResult,
         memoryAidService: widget.memoryAidService,
         memoryVaultService: widget.memoryVaultService,
-        onOpenMemoryAid: () => _openTab(AppTab.memory),
+        onOpenMemoryAid: () => _openExtras(ExtrasView.memories),
         aiService: widget.aiService,
         gameHistory: _gameHistory,
         settings: _gameSettings,
         onSettingsChanged: _saveGameSettings,
         voice: widget.voice,
       ),
-      RemindersScreen(
-        reminders: _reminders,
-        onAddReminder: _addReminder,
-        onToggleComplete: _toggleReminderComplete,
-        alarmStatus: _alarmStatus,
-        onCheckNotifications: _openNotificationCheck,
-        onOpenReminder: _openReminderDetails,
+      AdventureProgressScreen(
+        store: _adventures,
+        onOpenGameProgress: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PlayerProgressScreen(history: _gameHistory),
+          ),
+        ),
       ),
-      MemoryHubScreen(
-        service: widget.memoryAidService,
-        vault: widget.memoryVaultService,
-      ),
-      ProfileScreen(
-        profile: _profile,
-        onSave: _saveProfile,
-        onOpenCaregivers:
-            widget.careSync?.isConfigured == true ? _openCaregivers : null,
-      ),
+      switch (_extrasView) {
+        null => ExtrasScreen(
+          strings: strings,
+          reminderCount: _reminders.length,
+          onOpenReminders: () => _openExtras(ExtrasView.reminders),
+          onOpenMemories: () => _openExtras(ExtrasView.memories),
+          onOpenProfile: () => _openExtras(ExtrasView.profile),
+          onOpenAssistant: _openCompanion,
+        ),
+        ExtrasView.reminders => RemindersScreen(
+          reminders: _reminders,
+          onAddReminder: _addReminder,
+          onToggleComplete: _toggleReminderComplete,
+          alarmStatus: _alarmStatus,
+          onCheckNotifications: _openNotificationCheck,
+          onOpenReminder: _openReminderDetails,
+        ),
+        ExtrasView.memories => MemoryHubScreen(
+          service: widget.memoryAidService,
+          vault: widget.memoryVaultService,
+        ),
+        ExtrasView.profile => ProfileScreen(
+          profile: _profile,
+          onSave: _saveProfile,
+          onOpenCaregivers:
+              widget.careSync?.isConfigured == true ? _openCaregivers : null,
+        ),
+      },
     ];
 
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_currentIndex])),
+      appBar: AppBar(
+        title: Text(_extrasTitle(strings) ?? titles[_currentIndex]),
+        leading: _extrasView == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back to Extras',
+                onPressed: () => _openExtras(null),
+              ),
+      ),
       // Reachable from every tab. Placed above the navigation bar rather than
       // over it, so it never covers a destination.
       floatingActionButton: _CompanionButton(onPressed: _openCompanion),
@@ -601,37 +727,26 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: _openTab,
-        destinations: [
+        destinations: const [
           NavigationDestination(
-            icon: const Icon(Icons.home_outlined),
-            selectedIcon: const Icon(Icons.home, color: AppColors.primaryDark),
-            label: strings.navHome,
+            icon: Icon(Icons.explore_outlined),
+            selectedIcon: Icon(Icons.explore, color: AppColors.primaryDark),
+            label: 'Quest',
           ),
           NavigationDestination(
-            icon: const Icon(Icons.psychology_outlined),
-            selectedIcon: const Icon(
-              Icons.psychology,
-              color: AppColors.primaryDark,
-            ),
-            label: strings.navGames,
+            icon: Icon(Icons.psychology_outlined),
+            selectedIcon: Icon(Icons.psychology, color: AppColors.primaryDark),
+            label: 'Games',
           ),
           NavigationDestination(
-            icon: const Icon(Icons.alarm_outlined),
-            selectedIcon: const Icon(Icons.alarm, color: AppColors.primaryDark),
-            label: strings.navReminders,
+            icon: Icon(Icons.timeline_outlined),
+            selectedIcon: Icon(Icons.timeline, color: AppColors.primaryDark),
+            label: 'Progress',
           ),
           NavigationDestination(
-            icon: const Icon(Icons.photo_album_outlined),
-            selectedIcon: const Icon(
-              Icons.photo_album,
-              color: AppColors.primaryDark,
-            ),
-            label: strings.navMemory,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.person_outline),
-            selectedIcon: const Icon(Icons.person, color: AppColors.primaryDark),
-            label: strings.navProfile,
+            icon: Icon(Icons.widgets_outlined),
+            selectedIcon: Icon(Icons.widgets, color: AppColors.primaryDark),
+            label: 'Extras',
           ),
         ],
       ),

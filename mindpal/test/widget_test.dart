@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mindpal/adventure/storage/adventure_store.dart';
 import 'package:mindpal/app.dart';
 import 'package:mindpal/services/ai_service.dart';
 import 'package:mindpal/services/game_history_service.dart';
@@ -38,6 +39,7 @@ Future<void> _pumpApp(WidgetTester tester, InMemoryStorage storage) async {
       memoryVaultService: MemoryVaultService(storage, media: InMemoryMediaStore()),
       gameHistoryService: GameHistoryService(storage),
       gameSettingsService: GameSettingsService(storage),
+      adventureStore: AdventureStore(storage),
       languageService: LanguageService(storage),
       aiService: const DeterministicAiService(),
     ),
@@ -45,9 +47,9 @@ Future<void> _pumpApp(WidgetTester tester, InMemoryStorage storage) async {
   await tester.pumpAndSettle();
 }
 
-/// Scrolls Home until [finder] is on screen.
+/// Scrolls a tab's list until [finder] is on screen.
 ///
-/// Home is a ListView, and a ListView does not build children below the
+/// These are ListViews, and a ListView does not build children below the
 /// viewport at all — so something that exists but is further down cannot be
 /// found without scrolling to it. This is not a workaround for a bug; it is how
 /// a long list behaves.
@@ -56,80 +58,126 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+/// Opens one of the four destinations by its bar icon.
+Future<void> _openTab(WidgetTester tester, IconData icon) async {
+  await tester.tap(find.byIcon(icon).first);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  testWidgets('home leads with games', (tester) async {
+  testWidgets('the app opens on Festival Quest', (tester) async {
     await _pumpApp(tester, InMemoryStorage());
 
-    // Play a game is the first action and is visible without scrolling: that
-    // is the whole point of the game-led ordering.
-    expect(find.text('Play a game'), findsOneWidget);
-    expect(find.text('Games'), findsOneWidget);
-
-    // The games are named on Home with what they are and how hard they are set.
-    expect(find.text('Story Order'), findsOneWidget);
-    expect(find.text('Family Photo Match'), findsOneWidget);
-    expect(find.textContaining('Difficulty: Easy'), findsWidgets);
-
-    // Which pack the pictures come from, and a way to change it. It sits just
-    // below the four game rows, so on a phone-sized screen it needs scrolling
-    // to.
-    final packLine = find.textContaining('Assam: Bihu and everyday things');
-    await _scrollTo(tester, packLine);
-    expect(packLine, findsWidgets);
-    expect(find.text('Change'), findsOneWidget);
+    // The adventure is the main journey now, and it is what the app opens on.
+    expect(find.text('Festival Quest'), findsWidgets);
+    expect(find.text('Start Adventure'), findsOneWidget);
+    expect(find.text('Saved Adventures'), findsOneWidget);
+    expect(find.text('Quick Games'), findsWidgets);
+    expect(find.text('My Progress'), findsWidgets);
   });
 
-  testWidgets('the other features are still reachable from home', (
+  testWidgets('with nothing played there is nothing to continue', (
     tester,
   ) async {
     await _pumpApp(tester, InMemoryStorage());
 
-    // Below the games, in the smaller section — present, just no longer
-    // competing with Play a game for attention.
-    await _scrollTo(tester, find.text('Also here'));
-    expect(find.text('My memories'), findsOneWidget);
+    // "Continue" appears only once there is something to continue. An empty
+    // one would be a button that leads nowhere.
+    expect(find.text('Continue Adventure'), findsNothing);
+  });
+
+  testWidgets('the four destinations all open without crashing', (
+    tester,
+  ) async {
+    await _pumpApp(tester, InMemoryStorage());
+
+    for (final icon in [
+      Icons.psychology_outlined, // Quick Games
+      Icons.timeline_outlined, // My Progress
+      Icons.widgets_outlined, // Extras
+      Icons.explore_outlined, // back to Festival Quest
+    ]) {
+      await _openTab(tester, icon);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('the quick games are still whole under Quick Games', (
+    tester,
+  ) async {
+    await _pumpApp(tester, InMemoryStorage());
+    await _openTab(tester, Icons.psychology_outlined);
+
+    expect(find.text('Play, Remember, Connect'), findsOneWidget);
+    expect(find.text('Cultural Memory Match'), findsWidgets);
+    await _scrollTo(tester, find.text('Story Order'));
+    expect(find.text('Story Order'), findsWidgets);
+    await _scrollTo(tester, find.text('Other games'));
+    expect(find.text('Sequence Recall'), findsOneWidget);
+  });
+
+  testWidgets('reminders, memories and the assistant live in Extras', (
+    tester,
+  ) async {
+    await _pumpApp(tester, InMemoryStorage());
+    await _openTab(tester, Icons.widgets_outlined);
+
+    // Everything still works; it has simply stopped competing with the game
+    // for the front of the app.
+    expect(find.text('Extras'), findsWidgets);
     expect(find.text('My reminders'), findsOneWidget);
-    expect(find.text('People who help me'), findsOneWidget);
+    expect(find.text('My memories'), findsOneWidget);
     expect(find.text('Memory Assistant'), findsOneWidget);
+    expect(
+      find.textContaining('You do not need any of it to play'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('with nothing saved, home says so rather than showing zeros', (
+  testWidgets('an Extra opens in place and comes back', (tester) async {
+    await _pumpApp(tester, InMemoryStorage());
+    await _openTab(tester, Icons.widgets_outlined);
+
+    await tester.tap(find.text('My reminders'));
+    await tester.pumpAndSettle();
+    expect(find.text('No reminders yet'), findsOneWidget);
+
+    // Back to the Extras menu, not out of the app.
+    await tester.tap(find.byTooltip('Back to Extras'));
+    await tester.pumpAndSettle();
+    expect(find.text('My memories'), findsOneWidget);
+  });
+
+  testWidgets('playing is never gated on linking a caregiver', (tester) async {
+    await _pumpApp(tester, InMemoryStorage());
+
+    // Nothing on the way into an adventure mentions a caregiver, a code or a
+    // sign-in. The caregiver tools are preserved, in Extras, and optional.
+    expect(find.textContaining('caregiver'), findsNothing);
+    expect(find.textContaining('code'), findsNothing);
+
+    await tester.tap(find.text('Start Adventure'));
+    await tester.pumpAndSettle();
+
+    // The introduction says, before anything else, that the story is made up.
+    expect(find.text('This story is made up'), findsOneWidget);
+    await _scrollTo(tester, find.text('Begin the adventure'));
+    expect(find.text('Begin the adventure'), findsOneWidget);
+  });
+
+  testWidgets('saving the profile updates the name shown in Extras', (
     tester,
   ) async {
     await _pumpApp(tester, InMemoryStorage());
 
-    await _scrollTo(tester, find.text('No activity yet today'));
-    expect(find.text('No activity yet today'), findsOneWidget);
-
-    await _scrollTo(tester, find.text('No reminders for today'));
-    expect(find.text('No reminders for today'), findsOneWidget);
-  });
-
-  testWidgets('nothing played yet means no Continue playing card', (
-    tester,
-  ) async {
-    await _pumpApp(tester, InMemoryStorage());
-
-    // It appears only once there is something to continue. An empty
-    // "Continue playing" would be a button that leads nowhere.
-    expect(find.text('Continue playing'), findsNothing);
-  });
-
-  testWidgets('saving the profile updates the greeting on Home', (
-    tester,
-  ) async {
-    await _pumpApp(tester, InMemoryStorage());
-
-    // Before a name is entered the greeting uses a friendly placeholder.
-    expect(find.text('Friend'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.person_outline));
+    await _openTab(tester, Icons.widgets_outlined);
+    await tester.tap(find.text('My Profile'));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextFormField).first, 'Lakshmi');
     await tester.pumpAndSettle();
 
-    // The profile form is now taller than the test window, so Save has to be
+    // The profile form is taller than the test window, so Save has to be
     // scrolled into view before it can be tapped. Without this the tap lands
     // on whatever happens to be painted at those coordinates.
     final saveButton = find.text('Save my details');
@@ -138,33 +186,14 @@ void main() {
     await tester.tap(saveButton);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.home_outlined));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Lakshmi'), findsOneWidget);
-    expect(find.text('Friend'), findsNothing);
-  });
-
-  testWidgets('every tab opens without crashing', (tester) async {
-    await _pumpApp(tester, InMemoryStorage());
-
-    for (final icon in [
-      Icons.psychology_outlined, // MindPal games
-      Icons.alarm_outlined, // Reminders
-      Icons.photo_album_outlined, // Memory
-      Icons.person_outline, // Profile
-      Icons.home_outlined, // back to Home
-    ]) {
-      await tester.tap(find.byIcon(icon).first);
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-    }
+    expect(find.widgetWithText(TextFormField, 'Lakshmi'), findsOneWidget);
   });
 
   testWidgets('changing the language retranslates the shell', (tester) async {
     await _pumpApp(tester, InMemoryStorage());
 
-    await tester.tap(find.byIcon(Icons.person_outline));
+    await _openTab(tester, Icons.widgets_outlined);
+    await tester.tap(find.text('My Profile'));
     await tester.pumpAndSettle();
 
     // Profile -> the language row -> the picker.
@@ -175,9 +204,8 @@ void main() {
     await tester.tap(find.text('অসমীয়া'));
     await tester.pumpAndSettle();
 
-    // One tap retranslates the navigation bar. That is what LanguageScope
-    // being an InheritedWidget buys us — no listeners wired by hand.
-    expect(find.text('ঘৰ'), findsOneWidget); // "Home"
-    expect(find.text('Home'), findsNothing);
+    // One tap retranslates the screen. That is what LanguageScope being an
+    // InheritedWidget buys us — no listeners wired by hand.
+    expect(find.text('English'), findsNothing);
   });
 }

@@ -12,6 +12,7 @@ import 'services/memory_vault_service.dart';
 import 'models/reminder.dart';
 import 'services/notification_service.dart';
 import 'services/care/care_sync_service.dart';
+import 'adventure/storage/adventure_store.dart';
 import 'services/game_settings_service.dart';
 import 'services/voice/voice_controller.dart';
 import 'services/profile_service.dart';
@@ -33,6 +34,7 @@ class MindPalApp extends StatefulWidget {
     required this.memoryAidService,
     required this.memoryVaultService,
     required this.gameSettingsService,
+    required this.adventureStore,
     required this.gameHistoryService,
     required this.aiService,
     required this.languageService,
@@ -55,6 +57,9 @@ class MindPalApp extends StatefulWidget {
 
   /// Sound, movement and reading-aloud choices for the games.
   final GameSettingsService gameSettingsService;
+
+  /// Festival Quest adventures and progress.
+  final AdventureStore adventureStore;
 
   final GameHistoryService gameHistoryService;
   final AiService aiService;
@@ -118,6 +123,7 @@ class _MindPalAppState extends State<MindPalApp> {
           memoryAidService: widget.memoryAidService,
           memoryVaultService: widget.memoryVaultService,
           gameSettingsService: widget.gameSettingsService,
+          adventureStore: widget.adventureStore,
           voice: widget.voice,
           careSync: widget.careSync,
           gameHistoryService: widget.gameHistoryService,
