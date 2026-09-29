@@ -127,6 +127,13 @@ Three real bugs, all caught by tests rather than by playing:
 3. **The highlight ring pulsed for ever**, which is exactly what the "less
    movement" setting exists to remove — and it meant the widget tree never
    settled, so every test that waited on it hung. It is a steady ring now.
+4. **Icons saved as font code points broke the release build.** Rebuilding
+   `IconData` from a number is a non-constant instance, and Flutter then cannot
+   tree-shake the Material icon font — it refuses to build rather than ship
+   1.6MB of glyphs. Tests and debug runs were perfectly happy; only
+   `flutter build` caught it. Adventures now save an icon *name* from a fixed
+   registry (`model/adventure_icons.dart`), which also means a generated
+   adventure can only name a picture that exists.
 
 ---
 
@@ -225,7 +232,7 @@ adventure mentions a caregiver, a code or a sign-in.
 ## Tests
 
 ```bash
-cd mindpal && flutter analyze && flutter test   # 489 tests
+cd mindpal && flutter analyze && flutter test   # 492 tests
 cd server && npm test                           # 58 tests
 ```
 

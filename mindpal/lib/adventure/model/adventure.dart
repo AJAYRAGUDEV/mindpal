@@ -14,6 +14,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'adventure_icons.dart';
 import 'requirement.dart';
 
 /// Where an adventure came from. Shown to the player, because "made for you
@@ -107,7 +108,7 @@ class Hotspot {
     'x': x,
     'y': y,
     if (targetId != null) 'targetId': targetId,
-    'icon': icon.codePoint,
+    'icon': adventureIconName(icon),
     'color': color.toARGB32(),
     if (!visibleWhen.isAlwaysMet) 'visibleWhen': visibleWhen.toMap(),
     if (inspectText != null) 'inspectText': inspectText,
@@ -125,7 +126,7 @@ class Hotspot {
     x: (map['x'] as num?)?.toDouble() ?? 0.5,
     y: (map['y'] as num?)?.toDouble() ?? 0.5,
     targetId: map['targetId'] as String?,
-    icon: _icon(map['icon']),
+    icon: adventureIcon(map['icon'] as String?),
     color: Color((map['color'] as num?)?.toInt() ?? 0xFF00695C),
     visibleWhen: Requirement.fromMap(
       map['visibleWhen'] as Map<String, dynamic>?,
@@ -328,7 +329,7 @@ class AdventureCharacter {
     'name': name,
     'role': role,
     'locationId': locationId,
-    'icon': icon.codePoint,
+    'icon': adventureIconName(icon),
     'color': color.toARGB32(),
     'nodes': nodes.map((node) => node.toMap()).toList(),
   };
@@ -339,7 +340,7 @@ class AdventureCharacter {
         name: map['name'] as String? ?? '',
         role: map['role'] as String? ?? '',
         locationId: map['locationId'] as String? ?? '',
-        icon: _icon(map['icon']),
+        icon: adventureIcon(map['icon'] as String?),
         color: Color((map['color'] as num?)?.toInt() ?? 0xFF00695C),
         nodes: [
           for (final raw in (map['nodes'] as List? ?? const []))
@@ -372,7 +373,7 @@ class AdventureItem {
     'id': id,
     'name': name,
     'description': description,
-    'icon': icon.codePoint,
+    'icon': adventureIconName(icon),
     'color': color.toARGB32(),
     'price': price,
   };
@@ -381,7 +382,7 @@ class AdventureItem {
     id: map['id'] as String? ?? '',
     name: map['name'] as String? ?? '',
     description: map['description'] as String? ?? '',
-    icon: _icon(map['icon']),
+    icon: adventureIcon(map['icon'] as String?),
     color: Color((map['color'] as num?)?.toInt() ?? 0xFF8D4004),
     price: (map['price'] as num?)?.toInt() ?? 0,
   );
@@ -421,7 +422,7 @@ class MarketStall {
     'keeperLine': keeperLine,
     'itemIds': itemIds,
     if (soldOutItemIds.isNotEmpty) 'soldOutItemIds': soldOutItemIds.toList(),
-    'icon': icon.codePoint,
+    'icon': adventureIconName(icon),
     'color': color.toARGB32(),
   };
 
@@ -437,7 +438,7 @@ class MarketStall {
       for (final id in (map['soldOutItemIds'] as List? ?? const []))
         if (id is String) id,
     },
-    icon: _icon(map['icon']),
+    icon: adventureIcon(map['icon'] as String?),
     color: Color((map['color'] as num?)?.toInt() ?? 0xFF8D4004),
   );
 }
@@ -544,14 +545,14 @@ class Clue {
     'id': id,
     'text': text,
     'source': source,
-    'icon': icon.codePoint,
+    'icon': adventureIconName(icon),
   };
 
   factory Clue.fromMap(Map<String, dynamic> map) => Clue(
     id: map['id'] as String? ?? '',
     text: map['text'] as String? ?? '',
     source: map['source'] as String? ?? '',
-    icon: _icon(map['icon']),
+    icon: adventureIcon(map['icon'] as String?),
   );
 }
 
@@ -701,7 +702,7 @@ class DecorationStyle {
     'name': name,
     'description': description,
     'color': color.toARGB32(),
-    'icon': icon.codePoint,
+    'icon': adventureIconName(icon),
   };
 
   factory DecorationStyle.fromMap(Map<String, dynamic> map) => DecorationStyle(
@@ -709,7 +710,7 @@ class DecorationStyle {
     name: map['name'] as String? ?? '',
     description: map['description'] as String? ?? '',
     color: Color((map['color'] as num?)?.toInt() ?? 0xFF6A1B9A),
-    icon: _icon(map['icon']),
+    icon: adventureIcon(map['icon'] as String?),
   );
 }
 
@@ -788,7 +789,7 @@ class Ending {
     'celebration': celebration,
     if (!requires.isAlwaysMet) 'requires': requires.toMap(),
     'color': color.toARGB32(),
-    'icon': icon.codePoint,
+    'icon': adventureIconName(icon),
   };
 
   factory Ending.fromMap(Map<String, dynamic> map) => Ending(
@@ -798,7 +799,7 @@ class Ending {
     celebration: map['celebration'] as String? ?? '',
     requires: Requirement.fromMap(map['requires'] as Map<String, dynamic>?),
     color: Color((map['color'] as num?)?.toInt() ?? 0xFF00695C),
-    icon: _icon(map['icon']),
+    icon: adventureIcon(map['icon'] as String?),
   );
 }
 
@@ -1041,19 +1042,4 @@ class Adventure {
 
   factory Adventure.fromJson(String source) =>
       Adventure.fromMap(jsonDecode(source) as Map<String, dynamic>);
-}
-
-/// Rebuilds an icon from a saved code point.
-///
-/// `IconData` built from a variable code point is normally tree-shaken away by
-/// the release build, which is why `pubspec.yaml` keeps `uses-material-design`
-/// and why every icon a generated adventure may use is also mentioned
-/// literally in the bundled adventure. A code point with no glyph still draws a
-/// box rather than crashing, and the label under it always says what the thing
-/// is.
-IconData _icon(Object? codePoint) {
-  final value =
-      (codePoint as num?)?.toInt() ?? Icons.help_outline_rounded.codePoint;
-  // ignore: non_const_argument_for_const_parameter
-  return IconData(value, fontFamily: 'MaterialIcons');
 }

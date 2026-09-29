@@ -1,8 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindpal/adventure/content/pongal_adventure.dart';
 import 'package:mindpal/adventure/engine/adventure_engine.dart';
 import 'package:mindpal/adventure/engine/adventure_state.dart';
 import 'package:mindpal/adventure/model/adventure.dart';
+import 'package:mindpal/adventure/model/adventure_icons.dart';
 import 'package:mindpal/adventure/validation/adventure_solver.dart';
 import 'package:mindpal/adventure/validation/adventure_validator.dart';
 
@@ -629,6 +631,58 @@ void main() {
       expect(restored.placed, {'slot_fire': 'clay_pot'});
       expect(restored.styleId, 'style_lamps');
       expect(restored.signature, state.signature);
+    });
+
+    test('pictures survive a round trip, by name', () {
+      // Icons used to be saved as font code points and rebuilt from the
+      // number. That compiles and passes tests, and then the release build
+      // refuses it: a non-constant IconData makes the whole Material icon font
+      // un-shakeable. They are saved as names from a fixed registry now.
+      final saved = adventure.toMap();
+      final firstSpot =
+          (saved['locations'] as List).first as Map<String, dynamic>;
+      final icon = ((firstSpot['hotspots'] as List).first
+          as Map<String, dynamic>)['icon'];
+
+      expect(icon, isA<String>(), reason: 'a name, not a number');
+      expect(kAdventureIcons.keys, contains(icon));
+
+      final restored = Adventure.fromJson(adventure.toJson());
+      expect(
+        restored.character('ammal')!.icon,
+        adventure.character('ammal')!.icon,
+      );
+      expect(restored.item('clay_pot')!.icon, adventure.item('clay_pot')!.icon);
+      expect(restored.clue('clue_dawn')!.icon, adventure.clue('clue_dawn')!.icon);
+    });
+
+    test('every picture the adventure uses is in the registry', () {
+      // An icon outside the registry would save as "unknown" and come back a
+      // question mark, so the bundled adventure must only use registered ones.
+      final used = <IconData>[
+        for (final place in adventure.locations)
+          for (final spot in place.hotspots) spot.icon,
+        for (final person in adventure.characters) person.icon,
+        for (final item in adventure.items) item.icon,
+        for (final clue in adventure.mystery.clues) clue.icon,
+        for (final style in adventure.preparation.styles) style.icon,
+        for (final ending in adventure.endings) ending.icon,
+        for (final stall in adventure.market.stalls) stall.icon,
+      ];
+
+      for (final icon in used) {
+        expect(
+          adventureIconName(icon),
+          isNot('unknown'),
+          reason: 'code point ${icon.codePoint} is not registered',
+        );
+      }
+    });
+
+    test('an unknown picture name opens as a question mark, not a crash', () {
+      expect(adventureIcon('a_name_from_a_later_version'),
+          Icons.help_outline_rounded);
+      expect(adventureIcon(null), Icons.help_outline_rounded);
     });
 
     test('the whole adventure survives a round trip', () {
